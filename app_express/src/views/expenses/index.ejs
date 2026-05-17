@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Keuangan</p>
+    <h1>Pengeluaran</h1>
+  </div>
+  <a href="/expenses/new" class="btn-primary">Tambah Pengeluaran</a>
+</div>
+<form class="filter-bar">
+  <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
+  <input type="date" name="end" value="<%= filters.end || '' %>" class="form-input compact">
+  <button class="btn-secondary">Filter</button>
+</form>
+<div class="table-card">
+  <table>
+    <thead><tr><th>Tanggal</th><th>Penerima</th><th>Kategori</th><th>Jumlah</th><th></th></tr></thead>
+    <tbody>
+      <% if (!expenses.length) { %><tr><td colspan="5" class="empty">Belum ada pengeluaran.</td></tr><% } %>
+      <% expenses.forEach((expense) => { %>
+        <tr>
+          <td><%= format.date(expense.expense_date) %></td>
+          <td><%= expense.recipient_name %></td>
+          <td><%= expense.category %></td>
+          <td class="font-bold"><%= format.currency(expense.amount) %></td>
+          <td class="text-right">
+            <form method="post" action="/expenses/<%= expense.id %>?_method=DELETE" data-confirm="Hapus pengeluaran ini?" class="inline"><button class="link danger">Hapus</button></form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../partials/footer') %>

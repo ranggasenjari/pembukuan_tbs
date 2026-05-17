@@ -1,0 +1,64 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Operasional</p>
+    <h1>Slip Timbangan</h1>
+  </div>
+  <a href="/bons/new" class="btn-primary">Tambah Bon</a>
+</div>
+
+<form class="filter-bar">
+  <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
+  <input type="date" name="end" value="<%= filters.end || '' %>" class="form-input compact">
+  <input name="q" value="<%= filters.q || '' %>" class="form-input compact" placeholder="Driver, plat, relasi">
+  <select name="status" class="form-input compact">
+    <option value="">Semua Status</option>
+    <% ['BELUM_DIBAYAR','TERTAGIH','LUNAS'].forEach((status) => { %>
+      <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= format.statusLabel(status) %></option>
+    <% }) %>
+  </select>
+  <button class="btn-secondary">Filter</button>
+</form>
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Tanggal</th>
+        <th>Tiket / Plat</th>
+        <th>Driver</th>
+        <th>Netto</th>
+        <th>Harga</th>
+        <th>Total</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (!bons.length) { %>
+        <tr><td colspan="8" class="empty">Belum ada data bon.</td></tr>
+      <% } %>
+      <% bons.forEach((bon) => { %>
+        <tr>
+          <td><%= format.date(bon.bon_date) %></td>
+          <td>
+            <div class="font-bold"><%= bon.ticket_number || '-' %></div>
+            <div class="text-xs text-slate-500"><%= bon.plate_number %></div>
+          </td>
+          <td>
+            <div><%= bon.driver_name || '-' %></div>
+            <div class="text-xs text-slate-500"><%= bon.relation_name || '' %></div>
+          </td>
+          <td><%= format.number(bon.netto_2) %> kg</td>
+          <td><%= format.currency(bon.price) %></td>
+          <td class="font-bold"><%= format.currency(bon.total) %></td>
+          <td><span class="status <%= bon.status.toLowerCase() %>"><%= format.statusLabel(bon.status) %></span></td>
+          <td class="text-right">
+            <a href="/bons/<%= bon.id %>" class="link">Detail</a>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,59 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Laporan</p>
+    <h1>Buku Besar</h1>
+    <p id="conn-status" class="text-sm text-slate-500">Realtime connecting...</p>
+  </div>
+  <button onclick="window.print()" class="btn-secondary">Print</button>
+</div>
+<form class="filter-bar">
+  <input type="date" name="start" value="<%= filters.start %>" class="form-input compact">
+  <input type="date" name="end" value="<%= filters.end %>" class="form-input compact">
+  <button class="btn-secondary">Filter</button>
+</form>
+<section class="grid gap-4 md:grid-cols-4">
+  <div class="stat-card"><span class="stat-label">Tonase</span><strong><%= format.number(summary.totalWeight) %> ton</strong></div>
+  <div class="stat-card"><span class="stat-label">Pembayaran</span><strong><%= format.currency(summary.totalPayment) %></strong></div>
+  <div class="stat-card"><span class="stat-label">Pengeluaran</span><strong><%= format.currency(summary.totalExp) %></strong></div>
+  <div class="stat-card"><span class="stat-label">Net Profit</span><strong><%= format.currency(summary.totalNetProfit) %></strong></div>
+</section>
+
+<section class="mt-6 form-card">
+  <h2>Transaksi Selesai</h2>
+  <% if (!ledger.margins.length) { %><p class="empty">Belum ada margin selesai.</p><% } %>
+  <div class="space-y-4">
+    <% ledger.margins.forEach((margin) => { %>
+      <article class="rounded-lg border border-slate-200 p-4">
+        <div class="flex flex-wrap justify-between gap-3">
+          <strong><%= format.date(margin.transaction_date) %></strong>
+          <span class="font-bold text-emerald-700">Profit <%= format.currency(margin.margin_amount) %></span>
+        </div>
+        <p class="text-sm text-slate-500">Offtaker <%= format.currency(margin.offtaker_amount) %> • Real <%= format.currency(margin.real_amount) %></p>
+      </article>
+    <% }) %>
+  </div>
+</section>
+
+<section class="mt-6 form-card">
+  <h2>Masih Berjalan</h2>
+  <% if (!ledger.inProgress.length) { %><p class="empty">Tidak ada bon berjalan.</p><% } %>
+  <div class="table-card flush">
+    <table>
+      <thead><tr><th>Tanggal</th><th>Plat</th><th>Driver</th><th>Status</th><th>Total</th></tr></thead>
+      <tbody>
+        <% ledger.inProgress.forEach((bon) => { %>
+          <tr>
+            <td><%= format.date(bon.bon_date) %></td>
+            <td><%= bon.plate_number %></td>
+            <td><%= bon.driver_name || '-' %></td>
+            <td><span class="status <%= bon.status.toLowerCase() %>"><%= format.statusLabel(bon.status) %></span></td>
+            <td><%= format.currency(bon.total) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+<script src="/js/ledger.js"></script>
+<%- include('../partials/footer') %>

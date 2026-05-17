@@ -1,0 +1,109 @@
+<%- include('../partials/header') %>
+<section class="login-screen">
+  <div class="login-shell">
+    <div class="login-visual">
+      <div class="login-brand-row">
+        <div class="brand-mark login-mark">PT</div>
+        <div>
+          <div class="login-brand-title">Pembukuan TBS</div>
+          <div class="login-brand-subtitle">Palm oil transaction control</div>
+        </div>
+      </div>
+
+      <div class="login-hero-copy">
+        <p class="login-kicker">Live operations workspace</p>
+        <h1>Satu panel untuk timbangan, nota, pembayaran, dan margin.</h1>
+        <p>Masuk untuk mengelola alur transaksi harian dengan data Supabase yang sama seperti aplikasi Flutter.</p>
+      </div>
+
+      <div class="login-dashboard-preview" aria-hidden="true">
+        <div class="preview-header">
+          <div>
+            <span>Periode aktif</span>
+            <strong data-login-date>Memuat tanggal</strong>
+          </div>
+          <div class="preview-clock" data-login-clock>00:00</div>
+        </div>
+
+        <div class="preview-metrics">
+          <div>
+            <span>Saldo</span>
+            <strong data-login-pulse="balance">Rp 0</strong>
+          </div>
+          <div>
+            <span>Bon aktif</span>
+            <strong data-login-pulse="bons">0</strong>
+          </div>
+          <div>
+            <span>Margin</span>
+            <strong data-login-pulse="margin">Rp 0</strong>
+          </div>
+        </div>
+
+        <div class="preview-stream">
+          <div class="stream-row">
+            <span class="stream-dot green"></span>
+            <span>Slip timbangan terbaca OCR</span>
+            <b>Baru</b>
+          </div>
+          <div class="stream-row">
+            <span class="stream-dot blue"></span>
+            <span>Nota transaksi siap dibayar</span>
+            <b>Nota</b>
+          </div>
+          <div class="stream-row">
+            <span class="stream-dot amber"></span>
+            <span>Margin offtaker masuk laporan</span>
+            <b>Ledger</b>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="login-panel-wrap">
+      <div class="login-card">
+        <div class="login-card-head">
+          <div class="brand-mark small">PT</div>
+          <div>
+            <p>Masuk Aplikasi</p>
+            <h2>Palm Oil Inv</h2>
+          </div>
+        </div>
+        <p class="login-card-copy">Gunakan akun Supabase yang sudah terdaftar untuk membuka dashboard pembukuan.</p>
+
+        <% if (flash && flash.error) { %>
+          <div class="login-error"><i data-lucide="triangle-alert"></i><span><%= flash.error %></span></div>
+        <% } %>
+
+        <form method="post" action="/login" class="login-form">
+          <label>
+            <span>Email</span>
+            <div class="login-input-wrap">
+              <i data-lucide="mail"></i>
+              <input name="email" type="email" required autocomplete="email" placeholder="nama@perusahaan.com">
+            </div>
+          </label>
+          <label>
+            <span>Password</span>
+            <div class="login-input-wrap">
+              <i data-lucide="lock-keyhole"></i>
+              <input name="password" type="password" required autocomplete="current-password" placeholder="Masukkan password">
+            </div>
+          </label>
+          <button class="login-submit">
+            <span>Masuk Dashboard</span>
+            <i data-lucide="arrow-right"></i>
+          </button>
+        </form>
+
+        <div class="login-footnote">
+          <span class="status-light"></span>
+          <span>Secure session dengan Supabase Auth</span>
+        </div>
+      </div>
+      <p class="login-copyright">Hak Cipta, Dias J Sadewo</p>
+    </div>
+  </div>
+</section>
+<script src="/js/login.js"></script>
+<%- include('../partials/footer') %>

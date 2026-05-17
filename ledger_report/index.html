@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Ledger Dashboard - Palm Oil</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+
+        body {
+            /* font-family: 'Inter', sans-serif; */
+        }
+
+        .tv-opt {
+            font-size: 1rem;
+        }
+
+        .tv-title {
+            font-size: 2.5rem;
+        }
+
+        .table-tv td,
+        .table-tv th {
+            padding: 0.75rem 0.5rem;
+        }
+
+        @media print {
+            @page {
+                size: landscape;
+                margin: 0.5cm;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: white !important;
+                color: black !important;
+                padding: 0 !important;
+            }
+
+            .margin-group {
+                border: 1px solid #ccc !important;
+                background: white !important;
+                box-shadow: none !important;
+                margin-bottom: 2rem !important;
+                page-break-inside: avoid;
+            }
+
+            .bg-slate-700\/50,
+            .bg-slate-800,
+            .bg-slate-900,
+            .bg-gradient-to-r {
+                background: #f1f5f9 !important;
+                color: black !important;
+            }
+
+            .text-slate-100,
+            .text-slate-200,
+            .text-slate-300,
+            .text-slate-400,
+            .text-white,
+            .text-green-500,
+            .text-emerald-400,
+            .text-blue-300,
+            .text-amber-300 {
+                color: black !important;
+            }
+
+            table {
+                width: 100% !important;
+                border: 1px solid black !important;
+            }
+
+            th,
+            td {
+                border: 1px solid #ddd !important;
+                color: black !important;
+                font-size: 8pt !important;
+                white-space: nowrap !important;
+                padding: 4px !important;
+            }
+
+            .bg-blue-900\/30,
+            .bg-green-900\/30,
+            .bg-rose-900\/30,
+            .bg-amber-900\/40,
+            .bg-blue-900\/10,
+            .bg-green-900\/10,
+            .bg-rose-900\/10 {
+                background: transparent !important;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8">
+    <div class="max-w-[1920px] mx-auto">
+        <!-- Header Section -->
+        <div class="flex flex-col lg:flex-row justify-between items-center mb-8 gap-4 border-b border-slate-700 pb-6">
+            <div class="text-center lg:text-left">
+                <h1 class="tv-title font-bold text-green-500 tracking-tighter">BUKU BESAR</h1>
+                <div class="flex items-center gap-3 justify-center lg:justify-start">
+                    <div id="live-indicator-wrapper"
+                        class="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                        <span id="live-indicator" class="flex h-2 w-2 rounded-full bg-slate-500"></span>
+                        <span id="conn-status"
+                            class="text-[10px]   text-slate-400 uppercase tracking-widest">Connecting...</span>
+                    </div>
+                    <p class="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Real-time Ledger Dashboard
+                    </p>
+                    <button id="sound-toggle"
+                        class="ml-2 bg-slate-800 hover:bg-slate-700 p-2 rounded-full border border-slate-700 transition group"
+                        title="Toggle Sound">
+                        <span id="sound-icon" class="text-slate-500 group-hover:text-amber-500">
+                            <!-- Volume Off (Default) -->
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                            </svg>
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <div
+                class="flex flex-wrap justify-center gap-4 no-print bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                <div class="flex flex-col">
+                    <span class="text-[10px] uppercase font-bold text-slate-500 mb-1">Rentang Tanggal</span>
+                    <div class="flex items-center gap-2">
+                        <input type="date" id="start-date"
+                            class="bg-slate-700 border-none rounded text-sm p-2 focus:ring-2 focus:ring-green-500">
+                        <span class="text-slate-500">-</span>
+                        <input type="date" id="end-date"
+                            class="bg-slate-700 border-none rounded text-sm p-2 focus:ring-2 focus:ring-green-500">
+                    </div>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button id="apply-filter"
+                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition text-sm">PROSES</button>
+                    <button id="reset-live"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition text-sm uppercase">Live
+                        Mode</button>
+                    <button id="print-btn"
+                        class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg transition text-sm uppercase flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Cetak
+                    </button>
+                </div>
+            </div>
+
+            <div class="text-center lg:text-right">
+                <p id="current-time" class="text-2xl font-mono font-bold text-slate-300">00:00:00</p>
+                <p id="current-date" class="text-slate-500 font-bold uppercase tracking-widest">Senin, 01 Jan 2025</p>
+            </div>
+        </div>
+
+        <!-- Global Summary Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10 no-print">
+            <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-blue-500 shadow-xl">
+                <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Berat (MT)</p>
+                <div class="flex items-baseline gap-2">
+                    <h2 id="summary-weight" class="text-3xl   text-white">0.00</h2>
+                    <span class="text-slate-500 font-bold uppercase">Ton</span>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-2">BULAN BERJALAN</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-emerald-500 shadow-xl">
+                <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Pembayaran</p>
+                <h2 id="summary-payment" class="text-3xl   text-emerald-400">Rp 0</h2>
+                <p class="text-[10px] text-slate-500 mt-2 tracking-widest uppercase">Bulan Berjalan</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-rose-500 shadow-xl">
+                <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Pengeluaran</p>
+                <h2 id="summary-expense" class="text-3xl   text-rose-400">Rp 0</h2>
+                <p class="text-[10px] text-slate-500 mt-2 tracking-widest uppercase">Bulan Berjalan</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-amber-500 shadow-xl">
+                <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Laba Bersih</p>
+                <h2 id="summary-profit" class="text-3xl   text-amber-400">Rp 0</h2>
+                <p class="text-[10px] text-slate-500 mt-2 tracking-widest uppercase">Bulan Berjalan</p>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="ledger-container" class="space-y-12">
+            <div class="flex justify-center p-20">
+                <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-500"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isLive = true;
+        let refreshTimer;
+
+        async function init() {
+            try {
+                // Initial fetch
+                await refreshData();
+
+                // Setup Clock
+                setInterval(updateClock, 1000);
+                updateClock();
+
+                // Setup SSE for Realtime
+                setupSSE();
+
+                // UI Events
+                document.getElementById('apply-filter').addEventListener('click', applyFilter);
+                document.getElementById('reset-live').addEventListener('click', resetLive);
+                document.getElementById('print-btn').addEventListener('click', () => window.print());
+                document.getElementById('sound-toggle').addEventListener('click', toggleSound);
+            } catch (err) {
+                console.error("Initialization error:", err);
+                updateConnStatus('Error', 'bg-rose-500');
+            }
+        }
+
+        function setupSSE() {
+            updateConnStatus('Connecting...', 'bg-amber-500');
+            const evtSource = new EventSource('/api/events');
+
+            evtSource.onopen = () => {
+                updateConnStatus('Live Online', 'bg-green-500');
+            };
+
+            evtSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.event === 'refresh' && isLive) {
+                    console.log("Realtime update received:", data.payload);
+
+                    // Play sound if a new bon is added
+                    if (data.payload && data.payload.table === 'bons' && data.payload.type === 'INSERT') {
+                        playNotificationSound();
+                    }
+
+                    debouncedRefresh();
+                }
+            };
+
+            evtSource.onerror = () => {
+                updateConnStatus('Offline (Retry)', 'bg-rose-500');
+            };
+        }
+
+        function debouncedRefresh() {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                if (isLive) refreshData();
+            }, 500);
+        }
+
+        async function refreshData(startDate = null, endDate = null) {
+            try {
+                // Fetch Summary
+                const summaryRes = await fetch(`/api/summary${startDate ? '?since=' + startDate : ''}`);
+                const summary = await summaryRes.json();
+                updateSummary(summary);
+
+                // Fetch Ledger
+                let ledgerUrl = '/api/ledger';
+                if (startDate && endDate) ledgerUrl += `?start=${startDate}&end=${endDate}`;
+                const ledgerRes = await fetch(ledgerUrl);
+                const ledger = await ledgerRes.json();
+                renderDashboard(ledger.margins, ledger.inProgress);
+            } catch (err) {
+                console.error("Fetch error:", err);
+            }
+        }
+
+        function updateSummary(data) {
+            document.getElementById('summary-weight').innerText = data.totalWeight.toFixed(2);
+            document.getElementById('summary-payment').innerText = formatCurrency(data.totalPayment);
+            document.getElementById('summary-expense').innerText = formatCurrency(data.totalExp);
+            document.getElementById('summary-profit').innerText = formatCurrency(data.totalNetProfit);
+        }
+
+        function renderDashboard(margins, ipBons) {
+            const container = document.getElementById('ledger-container');
+            let html = '';
+
+            // Render In-Progress Section
+            if (ipBons && ipBons.length > 0) {
+                html += `
+                <div class="margin-group bg-slate-800 rounded-3xl overflow-hidden border-2 border-dashed border-slate-600 shadow-2xl mb-12">
+                    <div class="bg-slate-700/50 p-4 border-b border-slate-700 flex justify-between items-center">
+                        <span class="  text-slate-300 uppercase tracking-widest text-lg flex items-center gap-2">
+                            <span class="flex h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
+                            TRANSAKSI DALAM PROSES (ON-GOING)
+                        </span>
+                        <span class="bg-blue-900 text-blue-300 px-3 py-1 rounded-full text-xs font-bold">${ipBons.length} BON</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left table-tv border-collapse">
+                            <thead class="bg-slate-900 border-b border-slate-700 text-[10px] text-slate-500   uppercase tracking-widest">
+                                <tr>
+                                    <th class="p-4 border-r border-slate-700/50">TGL</th>
+                                    <th class="p-4 border-r border-slate-700/50">NOPOL</th>
+                                    <th class="p-4 border-r border-slate-700/50 text-right">NETTO (KG)</th>
+                                    <th class="p-4 border-r border-slate-700/50 text-right">HARGA (RP)</th>
+                                    <th class="p-4 border-r border-slate-700/50">STATUS NOTA</th>
+                                    <th class="p-4">STATUS BAYAR</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-700/50 text-xs tv-opt">
+                `;
+
+                ipBons.forEach(bon => {
+                    const notaItem = bon.nota_items && bon.nota_items[0];
+                    const nota = notaItem ? notaItem.notas : null;
+                    const payment = nota && nota.payments && nota.payments[0];
+
+                    html += `
+                        <tr class="hover:bg-slate-700/20 transition">
+                            <td class="p-4 border-r border-slate-700/30">${formatDateShort(bon.bon_date)}</td>
+                            <td class="p-4 border-r border-slate-700/30   text-slate-200 text-lg uppercase">${bon.plate_number}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right   text-white text-lg">${Number(bon.netto_1).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right text-slate-400 font-bold">Rp ${Number(bon.price).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30">
+                                ${nota ? `<span class="bg-green-900/40 text-green-400 px-2 py-1 rounded text-[10px] font-mono">${nota.invoice_number}</span>` : `<span class="text-slate-600 italic">Belum Terbit</span>`}
+                            </td>
+                            <td class="p-4">
+                                ${payment ? `<span class="text-emerald-500 font-bold">Terbayar (${formatCurrency(payment.amount_paid)})</span>` : `<span class="text-slate-600 italic">Belum Bayar</span>`}
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table></div></div>`;
+            }
+
+            // Render Settled Margins
+            if (!margins || margins.length === 0) {
+                if (!ipBons || ipBons.length === 0) {
+                    container.innerHTML = `<div class="text-center p-20 text-slate-500 text-2xl font-bold">TIDAK ADA DATA UNTUK PERIODE INI</div>`;
+                } else {
+                    container.innerHTML = html;
+                }
+                return;
+            }
+
+            margins.forEach(margin => {
+                const mExpenses = (margin.expense_margins || []).map(em => em.expenses).filter(e => e != null);
+                const totalMExp = mExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+                const netProfit = Number(margin.margin_amount) - totalMExp;
+
+                html += `
+                <div class="margin-group bg-slate-800 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl mb-12">
+                    <div class="bg-gradient-to-r from-slate-700 to-transparent p-6 flex justify-between items-center border-b border-slate-700">
+                        <span class="  text-slate-100 uppercase tracking-tighter text-xl">OFFTAKER TRANSACTION: ${formatDateShort(margin.transaction_date)}</span>
+                        <span class="text-xs text-slate-500 font-mono">${margin.id.substring(0, 13)}...</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full tv-opt text-left table-tv border-collapse">
+                            <thead class="bg-slate-900 border-b border-slate-700">
+                                <tr class="text-slate-400   uppercase text-xs tracking-widest">
+                                    <th class="border-r border-slate-700">TGL</th>
+                                    <th class="border-r border-slate-700">NOPOL</th>
+                                    <th class="border-r border-slate-700 text-center">NETTO (KG)</th>
+                                    <th class="border-r border-slate-700 text-center text-emerald-500">HARGA</th>
+                                    <th class="border-r border-slate-700 text-center text-rose-500 width-48">POTONGAN</th>
+                                    <th class="border-r border-slate-700 text-right">PEMBAYARAN NOTA</th>
+                                    <th class="border-r border-slate-700 text-right bg-blue-900/30 font-bold">BYR OFFTAKER</th>
+                                    <th class="border-r border-slate-700 text-right bg-green-900/30 font-bold text-green-400">PROFIT</th>
+                                    <th class="border-r border-slate-700 bg-rose-900/30 text-rose-300">LIST EXPENSES</th>
+                                    <th class="text-right bg-amber-900/40   text-amber-300 text-lg">LABA BERSIH</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-700/50">
+                `;
+
+                let groupTotalNetto = 0;
+                let groupTotalPotongan = 0;
+                let groupTotalPaymentNota = 0;
+
+                let marginFirstRow = true;
+                const payments = margin.payments || [];
+                const totalRows = payments.reduce((acc, p) => acc + (p.notas?.nota_items?.length || 0), 0);
+
+                payments.forEach(payment => {
+                    const invoice = payment.notas;
+                    const bList = (invoice?.nota_items || []).map(i => i.bons).filter(b => b != null);
+                    bList.sort((a, b) => new Date(a.bon_date) - new Date(b.bon_date));
+
+                    let invFirstRow = true;
+
+                    bList.forEach((bon, idx) => {
+                        const unloading = Number(bon.biaya_bongkar || 0) * Number(bon.netto_1 || 0);
+                        const dynamicDeductions = (bon.bon_deductions || []).reduce((sum, d) => sum + Number(d.amount || 0), 0);
+                        const totalPot = Number(bon.dp || 0) + unloading + Number(bon.bp_colt || 0) + Number(bon.pph || 0) + Number(bon.uang_minum || 0) + dynamicDeductions;
+
+                        groupTotalNetto += Number(bon.netto_1 || 0);
+                        groupTotalPotongan += totalPot;
+
+                        const breakdown = [
+                            bon.dp > 0 ? `DP: ${formatCurrency(bon.dp)}` : null,
+                            unloading > 0 ? `Bongkar: ${formatCurrency(unloading)}` : null,
+                            bon.bp_colt > 0 ? `BP: ${formatCurrency(bon.bp_colt)}` : null,
+                            bon.pph > 0 ? `PPh: ${formatCurrency(bon.pph)}` : null,
+                            bon.uang_minum > 0 ? `Uang Minum: ${formatCurrency(bon.uang_minum)}` : null,
+                            ...(bon.bon_deductions || []).map(d => `${d.label}: ${formatCurrency(d.amount)}`)
+                        ].filter(x => x).join('\\n');
+
+                        html += `
+                        <tr class="hover:bg-slate-700/30 transition">
+                            <td class="border-r border-slate-700/30 whitespace-nowrap font-bold">${formatDateShort(bon.bon_date)}</td>
+                            <td class="border-r border-slate-700/30   text-slate-100 uppercase text-lg">${bon.plate_number}</td>
+                            <td class="border-r border-slate-700/30 text-right   text-white text-lg">${Number(bon.netto_1).toLocaleString('id-ID')}</td>
+                            <td class="border-r border-slate-700/30 text-right font-bold text-slate-400">Rp ${Number(bon.price).toLocaleString('id-ID')}</td>
+                            <td class="border-r border-slate-700/30 text-right text-rose-400/80 font-semibold cursor-help" title="${breakdown}">${Number(totalPot).toLocaleString('id-ID')}</td>
+                        `;
+
+                        if (invFirstRow) {
+                            groupTotalPaymentNota += Number(payment.amount_paid || 0);
+                            html += `
+                            <td class="border-r border-slate-700/30 text-right font-bold text-slate-300 align-middle py-6 px-4" rowspan="${bList.length}">
+                                <div class="text-lg">${formatCurrency(payment.amount_paid)}</div>
+                                <div class="text-xs font-mono text-slate-500 mt-1 uppercase tracking-widest">${invoice?.invoice_number}</div>
+                            </td>
+                            `;
+                            invFirstRow = false;
+                        }
+
+                        if (marginFirstRow) {
+                            const expenseListHtml = mExpenses.length > 0
+                                ? mExpenses.map(e => `<div class="flex justify-between border-b border-slate-700/50 py-1"><span class="text-slate-400">${e.recipient_name}</span><span class="font-bold">${formatCurrency(e.amount)}</span></div>`).join('')
+                                : '<div class="text-slate-600 italic">No Expenses</div>';
+
+                            html += `
+                            <td class="border-r border-slate-700/30 text-right   bg-blue-900/10 text-blue-300 align-middle py-6 px-4" rowspan="${totalRows}">${formatCurrency(margin.offtaker_amount)}</td>
+                            <td class="border-r border-slate-700/30 text-right   bg-green-900/10 text-emerald-400 align-middle py-6 px-4" rowspan="${totalRows}">${formatCurrency(margin.margin_amount)}</td>
+                            <td class="border-r border-slate-700/30 bg-rose-900/10 text-[13px] align-top py-4 px-4" rowspan="${totalRows}">
+                                <div class="max-h-[200px] overflow-y-auto pr-2">
+                                    ${expenseListHtml}
+                                    <div class="mt-2 text-right border-t border-rose-500/50 pt-1   text-rose-400">Total: ${formatCurrency(totalMExp)}</div>
+                                </div>
+                            </td>
+                            <td class="text-right   bg-slate-900 text-amber-400 align-middle py-6 px-4 text-lg" rowspan="${totalRows}">${formatCurrency(netProfit)}</td>
+                            `;
+                            marginFirstRow = false;
+                        }
+                        html += '</tr>';
+                    });
+                });
+
+                // Add Footer Row for Totals
+                html += `
+                    </tbody>
+                    <tfoot class="bg-slate-900/80 border-t-2 border-slate-700/50   text-white uppercase text-[10px]">
+                        <tr>
+                            <td colspan="2" class="p-4 text-center border-r border-slate-700/30 text-slate-500">TOTAL GROUP</td>
+                            <td class="p-4 text-right border-r border-slate-700/30 text-lg text-white">${Number(groupTotalNetto).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30"></td>
+                            <td class="p-4 text-right border-r border-slate-700/30 text-lg text-rose-400">Rp ${Number(groupTotalPotongan).toLocaleString('id-ID')}</td>
+                            <td class="p-4 text-right border-r border-slate-700/30 text-lg text-emerald-400">Rp ${Number(groupTotalPaymentNota).toLocaleString('id-ID')}</td>
+                            <td class="p-4 text-right border-r border-slate-700/30 text-lg text-blue-300">Rp ${Number(margin.offtaker_amount).toLocaleString('id-ID')}</td>
+                            <td class="p-4 text-right border-r border-slate-700/30 text-lg text-emerald-500">Rp ${Number(margin.margin_amount).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-rose-500 text-lg text-right">Rp ${Number(totalMExp).toLocaleString('id-ID')}</td>
+                            <td class="p-4 text-right bg-amber-900/40 text-amber-300 text-xl">Rp ${Number(netProfit).toLocaleString('id-ID')}</td>
+                        </tr>
+                    </tfoot>
+                </table></div></div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function formatCurrency(val) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+        }
+
+        function formatDateShort(str) {
+            const d = new Date(str);
+            return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-time').innerText = now.toLocaleTimeString('id-ID');
+            document.getElementById('current-date').innerText = now.toLocaleDateString('id-ID', {
+                weekday: 'long', day: '2-digit', month: 'short', year: 'numeric'
+            });
+        }
+
+        function updateConnStatus(text, colorClass) {
+            const indicator = document.getElementById('live-indicator');
+            const statusText = document.getElementById('conn-status');
+
+            indicator.className = `flex h-2 w-2 rounded-full ${colorClass}`;
+            if (colorClass.includes('animate-pulse') || colorClass.includes('bg-green-500')) {
+                indicator.classList.add('animate-pulse');
+            }
+            statusText.innerText = text;
+        }
+
+        function applyFilter() {
+            const start = document.getElementById('start-date').value;
+            const end = document.getElementById('end-date').value;
+            if (!start || !end) return;
+            isLive = false;
+            updateConnStatus('Filter Active', 'bg-slate-500');
+            refreshData(start, end);
+        }
+
+        function resetLive() {
+            isLive = true;
+            document.getElementById('start-date').value = '';
+            document.getElementById('end-date').value = '';
+            refreshData();
+            // SSE will stay active, just update status if it was changed
+        }
+
+        let soundEnabled = false;
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('sound-icon');
+            if (soundEnabled) {
+                // Resume audio context on user interaction
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                audioCtx.resume();
+
+                icon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                `;
+                // Play a test sound
+                playNotificationSound();
+            } else {
+                icon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                `;
+            }
+        }
+
+        function playNotificationSound() {
+            if (!soundEnabled) return;
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+                oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); // A4
+
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.5);
+            } catch (e) {
+                console.warn("Audio play failed:", e);
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

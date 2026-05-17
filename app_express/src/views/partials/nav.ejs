@@ -1,0 +1,72 @@
+<aside class="app-sidebar">
+  <div class="brand-block">
+    <div class="brand-mark">PT</div>
+    <div>
+      <div class="brand-title">Pembukuan TBS</div>
+      <div class="brand-subtitle">Palm oil operations</div>
+    </div>
+  </div>
+
+  <% const groups = [
+    ['Utama', [
+      ['/dashboard', 'Dashboard', 'layout-dashboard'],
+      ['/reports/ledger', 'Buku Besar', 'book-open-check']
+    ]],
+    ['Operasional', [
+      ['/bons', 'Slip Timbangan', 'receipt-text'],
+      ['/notas', 'Nota Transaksi', 'file-text']
+    ]],
+    ['Keuangan', [
+      ['/deposits', 'Saldo', 'wallet'],
+      ['/payments', 'Pembayaran', 'credit-card'],
+      ['/margins', 'Margin / Offtaker', 'trending-up'],
+      ['/expenses', 'Pengeluaran', 'send']
+    ]]
+  ]; %>
+
+  <nav class="sidebar-nav">
+    <% groups.forEach(([groupName, groupItems]) => { %>
+      <div class="nav-group">
+        <div class="nav-group-title"><%= groupName %></div>
+        <% groupItems.forEach(([href, label, icon]) => { const active = path === href || path.startsWith(`${href}/`); %>
+          <a href="<%= href %>" class="nav-item <%= active ? 'active' : '' %>">
+            <i data-lucide="<%= icon %>"></i>
+            <span><%= label %></span>
+          </a>
+        <% }) %>
+      </div>
+    <% }) %>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar"><%= (currentUser.email || 'U').slice(0,1).toUpperCase() %></div>
+      <div class="user-meta">
+        <div class="user-label">Signed in</div>
+        <div class="user-email"><%= currentUser.email %></div>
+      </div>
+    </div>
+    <form method="post" action="/logout">
+      <button class="logout-button"><i data-lucide="log-out"></i><span>Keluar Aplikasi</span></button>
+    </form>
+  </div>
+</aside>
+
+<header class="mobile-header">
+  <div class="mobile-header-row">
+    <a href="/dashboard" class="mobile-brand">
+      <span class="brand-mark small">PT</span>
+      <span>Pembukuan TBS</span>
+    </a>
+    <form method="post" action="/logout">
+      <button class="mobile-logout" aria-label="Keluar"><i data-lucide="log-out"></i></button>
+    </form>
+  </div>
+  <nav class="mobile-tabs">
+    <a href="/dashboard" class="chip">Dashboard</a>
+    <a href="/bons" class="chip">Bon</a>
+    <a href="/notas" class="chip">Nota</a>
+    <a href="/payments" class="chip">Bayar</a>
+    <a href="/reports/ledger" class="chip">Ledger</a>
+  </nav>
+</header>

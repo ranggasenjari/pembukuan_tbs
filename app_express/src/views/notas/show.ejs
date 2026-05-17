@@ -1,0 +1,68 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Detail Nota</p>
+    <h1><%= nota.invoice_number %></h1>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <% if (nota.status !== 'LUNAS') { %><a href="/notas/<%= nota.id %>/edit" class="btn-secondary">Edit</a><% } %>
+    <a href="/notas/<%= nota.id %>/pdf" target="_blank" class="btn-secondary pdf-link">PDF A4</a>
+    <a href="/notas/<%= nota.id %>/pdf/thermal" target="_blank" class="btn-secondary pdf-link">PDF Thermal</a>
+    <% if (nota.status === 'TERTAGIH') { %><a href="/payments/new?invoice_id=<%= nota.id %>" class="btn-primary">Bayar</a><% } %>
+  </div>
+</div>
+<% if (share) { %>
+  <div class="mb-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">Nota sudah dibuat. Gunakan tombol PDF atau Share dari browser.</div>
+<% } %>
+
+<section class="grid gap-5 lg:grid-cols-[1fr_320px]">
+  <div class="form-card">
+    <h2>Daftar Bon</h2>
+    <div class="table-card flush">
+      <table>
+        <thead><tr><th>Tanggal</th><th>Plat</th><th>Driver</th><th>Netto</th><th>Total</th></tr></thead>
+        <tbody>
+          <% bons.forEach((bon) => { %>
+            <tr>
+              <td><%= format.date(bon.bon_date) %></td>
+              <td><a class="link" href="/bons/<%= bon.id %>"><%= bon.plate_number %></a></td>
+              <td><%= bon.driver_name || '-' %></td>
+              <td><%= format.number(bon.netto_2) %> kg</td>
+              <td class="font-bold"><%= format.currency(bon.total) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <aside class="form-card">
+    <h2>Ringkasan</h2>
+    <dl class="detail-grid">
+      <dt>Penerima</dt><dd><%= nota.recipient_name || '-' %></dd>
+      <dt>Alamat</dt><dd><%= nota.recipient_address || '-' %></dd>
+      <dt>Status</dt><dd><span class="status <%= nota.status.toLowerCase() %>"><%= format.statusLabel(nota.status) %></span></dd>
+      <dt>Total</dt><dd class="text-xl font-black text-emerald-700"><%= format.currency(nota.total_amount) %></dd>
+    </dl>
+    <button type="button" class="mt-4 btn-secondary w-full" data-share-pdf="/notas/<%= nota.id %>/pdf/thermal" data-share-title="Nota <%= nota.invoice_number %>">Share PDF</button>
+    <% if (nota.status !== 'LUNAS') { %>
+      <form method="post" action="/notas/<%= nota.id %>?_method=DELETE" data-confirm="Hapus nota ini?" class="mt-2">
+        <button class="btn-danger w-full">Hapus Nota</button>
+      </form>
+    <% } %>
+  </aside>
+</section>
+
+<section class="mt-5 form-card">
+  <h2>Pembayaran</h2>
+  <% if (!payments.length) { %><p class="empty">Belum ada pembayaran.</p><% } %>
+  <div class="grid gap-3 md:grid-cols-2">
+    <% payments.forEach((payment) => { %>
+      <a href="<%= payment.proof_url || '#' %>" target="_blank" class="rounded-lg border border-slate-200 p-4">
+        <strong><%= format.currency(payment.amount_paid) %></strong>
+        <div class="text-sm text-slate-500"><%= format.date(payment.payment_date) %></div>
+      </a>
+    <% }) %>
+  </div>
+</section>
+<script src="/js/share-pdf.js"></script>
+<%- include('../partials/footer') %>

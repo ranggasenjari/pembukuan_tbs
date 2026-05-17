@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title ? `${title} - Pembukuan TBS` : 'Pembukuan TBS' %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="app-body">
+  <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+    <%- include('./nav') %>
+    <main class="app-main">
+      <div class="app-topbar">
+        <div>
+          <p class="topbar-kicker">Pembukuan TBS</p>
+          <p class="topbar-title"><%= title || 'Dashboard' %></p>
+        </div>
+        <div class="topbar-actions">
+          <a href="/bons/new" class="topbar-action"><i data-lucide="receipt-text"></i><span>Input Bon</span></a>
+          <a href="/payments/new" class="topbar-action secondary"><i data-lucide="wallet-cards"></i><span>Bayar Nota</span></a>
+        </div>
+      </div>
+      <div class="content-wrap">
+        <%- include('./messages') %>
+  <% } else { %>
+    <main>
+  <% } %>

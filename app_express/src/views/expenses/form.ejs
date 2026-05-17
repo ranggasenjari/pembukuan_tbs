@@ -1,0 +1,36 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Pengeluaran</p>
+    <h1>Tambah Pengeluaran</h1>
+  </div>
+  <a href="/expenses" class="btn-secondary">Kembali</a>
+</div>
+<form method="post" action="/expenses" class="space-y-5">
+  <section class="form-card max-w-2xl">
+    <h2>Informasi Pengeluaran</h2>
+    <label><span class="form-label">Nama Penerima</span><input required name="recipient_name" class="form-input"></label>
+    <label><span class="form-label">Kategori</span><select name="category" class="form-input"><option>MITRA</option><option>OPERASIONAL</option><option>DEPOSIT (SALDO)</option><option>LAINNYA</option></select></label>
+    <label><span class="form-label">Tanggal</span><input type="date" name="expense_date" value="<%= today %>" class="form-input"></label>
+    <label><span class="form-label">Jumlah</span><input required type="number" name="amount" class="form-input"></label>
+  </section>
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Pilih Sumber Profit / Margin</h2>
+      <strong id="margin-total" class="text-emerald-700">Rp 0</strong>
+    </div>
+    <% if (!margins.length) { %><p class="empty">Belum ada margin.</p><% } %>
+    <div class="mt-4 grid gap-3">
+      <% margins.forEach((margin) => { %>
+        <label class="select-row">
+          <input type="checkbox" name="margin_ids" value="<%= margin.id %>" data-total="<%= margin.margin_amount %>">
+          <span><strong>Profit <%= format.currency(margin.margin_amount) %></strong><small><%= format.date(margin.transaction_date) %></small></span>
+          <b><%= format.currency(margin.offtaker_amount) %></b>
+        </label>
+      <% }) %>
+    </div>
+  </section>
+  <button class="btn-primary">Simpan Pengeluaran</button>
+</form>
+<script src="/js/sum-checks.js"></script>
+<%- include('../partials/footer') %>

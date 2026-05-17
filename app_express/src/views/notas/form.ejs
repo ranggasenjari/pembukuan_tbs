@@ -1,0 +1,39 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Nota</p>
+    <h1><%= nota ? 'Edit Nota' : 'Buat Nota' %></h1>
+  </div>
+  <a href="<%= nota ? `/notas/${nota.id}` : '/notas' %>" class="btn-secondary">Kembali</a>
+</div>
+<form method="post" action="<%= nota ? `/notas/${nota.id}?_method=PUT` : '/notas' %>" class="space-y-5">
+  <section class="form-card">
+    <h2>Data Penerima</h2>
+    <div class="grid gap-4 md:grid-cols-2">
+      <label><span class="form-label">Kepada</span><input required name="recipient_name" value="<%= nota?.recipient_name || '' %>" class="form-input uppercase"></label>
+      <label><span class="form-label">Alamat</span><input name="recipient_address" value="<%= nota?.recipient_address || '' %>" class="form-input uppercase"></label>
+    </div>
+  </section>
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Pilih Bon</h2>
+      <strong id="nota-total" class="text-emerald-700">Rp 0</strong>
+    </div>
+    <% if (!bons.length) { %><p class="empty">Tidak ada bon yang tersedia.</p><% } %>
+    <div class="mt-4 grid gap-3">
+      <% bons.forEach((bon) => { const checked = selectedIds.includes(bon.id); %>
+        <label class="select-row">
+          <input type="checkbox" name="bon_ids" value="<%= bon.id %>" data-total="<%= bon.total %>" <%= checked ? 'checked' : '' %>>
+          <span>
+            <strong><%= bon.plate_number %></strong>
+            <small><%= format.date(bon.bon_date) %> • <%= format.number(bon.netto_2) %> kg • <%= format.statusLabel(bon.status) %></small>
+          </span>
+          <b><%= format.currency(bon.total) %></b>
+        </label>
+      <% }) %>
+    </div>
+  </section>
+  <button class="btn-primary"><%= nota ? 'Update Nota' : 'Generate Nota' %></button>
+</form>
+<script src="/js/nota-form.js"></script>
+<%- include('../partials/footer') %>

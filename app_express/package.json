@@ -1,0 +1,35 @@
+{
+  "name": "pembukuan-express",
+  "version": "1.0.0",
+  "description": "ExpressJS web app untuk Pembukuan TBS berbasis Supabase",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "vitest run --globals",
+    "test:watch": "vitest --globals"
+  },
+  "keywords": [
+    "express",
+    "supabase",
+    "pembukuan"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
+    "dotenv": "^17.2.3",
+    "ejs": "^3.1.10",
+    "express": "^5.2.1",
+    "express-session": "^1.18.2",
+    "method-override": "^3.0.0",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "pdfkit": "^0.17.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11",
+    "supertest": "^7.1.4",
+    "vitest": "^4.0.15"
+  }
+}

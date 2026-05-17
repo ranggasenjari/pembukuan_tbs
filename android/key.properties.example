@@ -1,0 +1,8 @@
+# Android Release Key Configuration
+# JANGAN PUSH FILE INI KE GIT!
+# Duplikasi file ini menjadi key.properties dan isi dengan credential lokal Anda
+
+RELEASE_STORE_FILE=/path/to/your/keystore/file.keystore
+RELEASE_STORE_PASSWORD=your_keystore_password
+RELEASE_KEY_ALIAS=your_key_alias
+RELEASE_KEY_PASSWORD=your_key_password

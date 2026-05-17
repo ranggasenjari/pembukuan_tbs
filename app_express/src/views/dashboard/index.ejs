@@ -1,0 +1,97 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Dashboard</p>
+    <h1>Dashboard Transaksi</h1>
+    <p class="text-sm text-slate-500">Ringkasan operasional dan keuangan periode terpilih.</p>
+  </div>
+  <form class="filter-bar !mb-0">
+    <input type="date" name="start" value="<%= filters.start %>" class="form-input compact">
+    <input type="date" name="end" value="<%= filters.end %>" class="form-input compact">
+    <button class="btn-primary">Filter</button>
+  </form>
+</div>
+
+<section class="dashboard-hero">
+  <div class="dashboard-hero-grid">
+    <div>
+      <p class="hero-label">Saldo tersedia saat ini</p>
+      <div class="hero-value"><%= format.currency(stats.currentBalance) %></div>
+      <p class="hero-meta">Saldo global dihitung dari seluruh deposit dikurangi seluruh pembayaran.</p>
+    </div>
+    <div class="hero-side">
+      <a href="/deposits" class="hero-side-item">
+        <span>Laba bersih periode</span>
+        <strong><%= format.currency(stats.netProfit) %></strong>
+      </a>
+      <a href="/margins" class="hero-side-item">
+        <span>Margin / profit</span>
+        <strong><%= format.currency(stats.totalMargin) %></strong>
+      </a>
+      <a href="/expenses" class="hero-side-item">
+        <span>Pengeluaran</span>
+        <strong><%= format.currency(stats.totalExpenses) %></strong>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="metric-grid">
+  <a href="/bons" class="metric-card">
+    <div class="metric-top">
+      <span class="metric-icon teal"><i data-lucide="receipt-text"></i></span>
+      <span class="stat-label">Bon Aktif</span>
+    </div>
+    <strong><%= stats.ongoingBons %></strong>
+    <small><%= stats.finishedBons %> bon sudah selesai</small>
+  </a>
+  <a href="/notas" class="metric-card">
+    <div class="metric-top">
+      <span class="metric-icon amber"><i data-lucide="file-text"></i></span>
+      <span class="stat-label">Nota Belum Lunas</span>
+    </div>
+    <strong><%= stats.unpaidNotas %></strong>
+    <small><%= stats.paidNotas %> nota lunas</small>
+  </a>
+  <a href="/margins" class="metric-card">
+    <div class="metric-top">
+      <span class="metric-icon blue"><i data-lucide="building-2"></i></span>
+      <span class="stat-label">Transaksi Offtaker</span>
+    </div>
+    <strong class="text-lg"><%= format.currency(stats.totalTransactions) %></strong>
+    <small>Nilai pembayaran dari offtaker</small>
+  </a>
+  <a href="/payments" class="metric-card">
+    <div class="metric-top">
+      <span class="metric-icon slate"><i data-lucide="credit-card"></i></span>
+      <span class="stat-label">Transaksi Saya</span>
+    </div>
+    <strong class="text-lg"><%= format.currency(stats.totalMyTransactions) %></strong>
+    <small>Total pembayaran ke nota</small>
+  </a>
+</section>
+
+<section class="panel-card mt-5 p-5">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-black text-slate-950">Analisis Keuangan</h2>
+      <p class="text-sm text-slate-500">Perbandingan transaksi, biaya, dan hasil bersih.</p>
+    </div>
+    <a href="/reports/ledger" class="btn-secondary">Buka Buku Besar</a>
+  </div>
+  <div class="analysis-grid">
+    <div class="analysis-item">
+      <span>Total Transaksi Offtaker</span>
+      <strong><%= format.currency(stats.totalTransactions) %></strong>
+    </div>
+    <div class="analysis-item">
+      <span>Total Transaksi Saya</span>
+      <strong><%= format.currency(stats.totalMyTransactions) %></strong>
+    </div>
+    <div class="analysis-item">
+      <span>Net Profit</span>
+      <strong class="text-emerald-700"><%= format.currency(stats.netProfit) %></strong>
+    </div>
+  </div>
+</section>
+<%- include('../partials/footer') %>

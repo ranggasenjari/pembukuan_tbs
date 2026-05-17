@@ -1,0 +1,89 @@
+<%- include('../partials/header') %>
+<% const b = bon || {}; const locked = bon && bon.status !== 'BELUM_DIBAYAR'; const deductions = (b.bon_deductions && b.bon_deductions.length ? b.bon_deductions : [{label:'', amount:0}]); %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Slip Timbangan</p>
+    <h1><%= bon ? 'Edit Bon' : 'Tambah Bon' %></h1>
+  </div>
+  <a href="<%= bon ? `/bons/${bon.id}` : '/bons' %>" class="btn-secondary">Kembali</a>
+</div>
+
+<% if (locked) { %>
+  <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">Data bon ini terkunci karena sudah diproses.</div>
+<% } %>
+
+<form id="bon-form" method="post" enctype="multipart/form-data" action="<%= bon ? `/bons/${bon.id}?_method=PUT` : '/bons' %>" class="space-y-5">
+  <section class="form-card">
+    <h2>Data Timbangan</h2>
+    <div class="grid gap-4 md:grid-cols-3">
+      <label><span class="form-label">Nomor Tiket</span><input name="ticket_number" value="<%= b.ticket_number || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Tanggal Bon</span><input type="date" name="bon_date" value="<%= b.bon_date ? format.dateInput(b.bon_date) : today %>" required class="form-input" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Plat Nomor</span><input name="plate_number" value="<%= b.plate_number || '' %>" required class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Nama Driver</span><input name="driver_name" value="<%= b.driver_name || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Relasi</span><input name="relation_name" value="<%= b.relation_name || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Asal Buah</span><input name="fruit_origin" value="<%= b.fruit_origin || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Netto 1</span><input name="netto_1" value="<%= b.netto_1 || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Netto 2</span><input name="netto_2" value="<%= b.netto_2 || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Harga</span><input name="price" value="<%= b.price || latestPrice || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Potongan</h2>
+      <% if (!locked) { %><button type="button" id="add-deduction" class="btn-secondary small">Tambah Potongan</button><% } %>
+    </div>
+    <div class="grid gap-4 md:grid-cols-5">
+      <label><span class="form-label">DP / Panjar</span><input name="dp" value="<%= b.dp || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Bongkar / Kg</span><input name="biaya_bongkar" value="<%= b.biaya_bongkar ?? 12 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">BP / Colt</span><input name="bp_colt" value="<%= b.bp_colt ?? 100000 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">PPh 0.25%</span><input name="pph" value="<%= b.pph || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Uang Minum</span><input name="uang_minum" value="<%= b.uang_minum ?? 10000 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+    </div>
+    <div id="deductions" class="mt-4 space-y-3">
+      <% deductions.forEach((d) => { %>
+        <div class="deduction-row grid gap-3 md:grid-cols-[1fr_220px_48px]">
+          <input name="deduction_label" value="<%= d.label || '' %>" class="form-input" placeholder="Nama potongan" <%= locked ? 'readonly' : '' %>>
+          <input name="deduction_amount" value="<%= d.amount || 0 %>" type="number" class="form-input bon-calc deduction-amount" <%= locked ? 'readonly' : '' %>>
+          <% if (!locked) { %><button type="button" class="remove-deduction rounded-lg bg-rose-50 text-rose-700">×</button><% } %>
+        </div>
+      <% }) %>
+    </div>
+    <div class="mt-5 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-3">
+      <div><span class="text-xs text-slate-500">Subtotal</span><strong id="subtotal-display" class="block text-lg">Rp 0</strong></div>
+      <div><span class="text-xs text-slate-500">Total Potongan</span><strong id="deduction-display" class="block text-lg">Rp 0</strong></div>
+      <div><span class="text-xs text-slate-500">Total Dibayar</span><strong id="total-display" class="block text-xl text-emerald-700">Rp 0</strong></div>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <h2>Foto dan OCR</h2>
+    <% if (b.image_url) { %><a href="<%= b.image_url %>" target="_blank" class="link">Lihat foto tersimpan</a><% } %>
+    <% if (!locked) { %>
+      <div class="mt-3 flex flex-wrap items-center gap-3">
+        <input id="bon-image" type="file" name="image" accept="image/*" class="form-input max-w-md">
+        <button type="button" id="ocr-button" class="btn-secondary">Baca OCR</button>
+        <span id="ocr-status" class="text-sm text-slate-500"></span>
+      </div>
+    <% } %>
+  </section>
+
+  <% if (!bon) { %>
+    <section class="form-card">
+      <h2>Simpan & Share Cepat</h2>
+      <div class="grid gap-4 md:grid-cols-2">
+        <label><span class="form-label">Nama Penerima Nota</span><input name="quick_recipient_name" class="form-input uppercase"></label>
+        <label><span class="form-label">Alamat Penerima</span><input name="quick_recipient_address" class="form-input uppercase"></label>
+      </div>
+    </section>
+  <% } %>
+
+  <% if (!locked) { %>
+    <div class="flex flex-wrap gap-3">
+      <button name="intent" value="save" class="btn-primary">Simpan</button>
+      <% if (!bon) { %><button name="intent" value="save_share" class="btn-secondary">Simpan & Buat Nota</button><% } %>
+    </div>
+  <% } %>
+</form>
+<script src="/js/bon-form.js"></script>
+<%- include('../partials/footer') %>

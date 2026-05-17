@@ -1,0 +1,40 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Keuangan</p>
+    <h1>Pembayaran</h1>
+    <p class="text-sm text-slate-500">Saldo tersedia: <strong><%= format.currency(balance) %></strong></p>
+  </div>
+  <a href="/payments/new" class="btn-primary">Tambah Pembayaran</a>
+</div>
+<form class="filter-bar">
+  <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
+  <input type="date" name="end" value="<%= filters.end || '' %>" class="form-input compact">
+  <button class="btn-secondary">Filter</button>
+</form>
+<div class="table-card">
+  <table>
+    <thead><tr><th>Tanggal</th><th>Nota</th><th>Jumlah</th><th>Margin</th><th>Bukti</th><th></th></tr></thead>
+    <tbody>
+      <% if (!payments.length) { %><tr><td colspan="6" class="empty">Belum ada pembayaran.</td></tr><% } %>
+      <% payments.forEach((payment) => { %>
+        <tr>
+          <td><%= format.date(payment.payment_date) %></td>
+          <td><%= payment.notas?.invoice_number || '-' %></td>
+          <td class="font-bold"><%= format.currency(payment.amount_paid) %></td>
+          <td><%= payment.margin_id ? 'Sudah masuk margin' : 'Belum' %></td>
+          <td><% if (payment.proof_url) { %><a class="link" target="_blank" href="<%= payment.proof_url %>">Lihat</a><% } %></td>
+          <td class="text-right">
+            <% if (!payment.margin_id) { %>
+              <a href="/payments/<%= payment.id %>/edit" class="link">Edit</a>
+              <form method="post" action="/payments/<%= payment.id %>?_method=DELETE" data-confirm="Hapus pembayaran ini?" class="inline">
+                <button class="link danger">Hapus</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../partials/footer') %>

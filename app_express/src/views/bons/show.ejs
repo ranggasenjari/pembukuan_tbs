@@ -1,0 +1,59 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Detail Bon</p>
+    <h1><%= bon.ticket_number || bon.plate_number %></h1>
+  </div>
+  <div class="flex gap-2">
+    <% if (bon.status === 'BELUM_DIBAYAR') { %>
+      <a href="/bons/<%= bon.id %>/edit" class="btn-secondary">Edit</a>
+      <form method="post" action="/bons/<%= bon.id %>?_method=DELETE" data-confirm="Hapus bon ini?">
+        <button class="btn-danger">Hapus</button>
+      </form>
+    <% } %>
+    <a href="/bons" class="btn-secondary">Kembali</a>
+  </div>
+</div>
+
+<section class="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+  <div class="form-card">
+    <h2>Informasi</h2>
+    <dl class="detail-grid">
+      <dt>Tanggal</dt><dd><%= format.date(bon.bon_date) %></dd>
+      <dt>Plat</dt><dd><%= bon.plate_number %></dd>
+      <dt>Driver</dt><dd><%= bon.driver_name || '-' %></dd>
+      <dt>Relasi</dt><dd><%= bon.relation_name || '-' %></dd>
+      <dt>Netto 1 / 2</dt><dd><%= format.number(bon.netto_1) %> / <%= format.number(bon.netto_2) %> kg</dd>
+      <dt>Harga</dt><dd><%= format.currency(bon.price) %></dd>
+      <dt>Status</dt><dd><span class="status <%= bon.status.toLowerCase() %>"><%= format.statusLabel(bon.status) %></span></dd>
+    </dl>
+  </div>
+  <div class="form-card">
+    <h2>Total</h2>
+    <p class="text-3xl font-black text-emerald-700"><%= format.currency(bon.total) %></p>
+    <p class="mt-2 text-sm text-slate-500">Termasuk potongan lain <%= format.currency(bon.pot_lain) %></p>
+    <% if (bon.image_url) { %><a href="<%= bon.image_url %>" target="_blank" class="mt-4 inline-flex btn-secondary">Lihat Foto</a><% } %>
+  </div>
+</section>
+
+<section class="mt-5 form-card">
+  <h2>Dokumen Terkait</h2>
+  <% if (!related.notas.length && !related.payments.length) { %>
+    <p class="empty">Belum ada nota atau pembayaran terkait.</p>
+  <% } %>
+  <div class="grid gap-3 md:grid-cols-2">
+    <% related.notas.forEach((nota) => { %>
+      <a href="/notas/<%= nota.id %>" class="rounded-lg border border-slate-200 p-4 hover:bg-slate-50">
+        <strong>Nota <%= nota.invoice_number %></strong>
+        <div class="text-sm text-slate-500"><%= format.currency(nota.total_amount) %></div>
+      </a>
+    <% }) %>
+    <% related.payments.forEach((payment) => { %>
+      <a href="<%= payment.proof_url || '#' %>" target="_blank" class="rounded-lg border border-slate-200 p-4 hover:bg-slate-50">
+        <strong>Pembayaran</strong>
+        <div class="text-sm text-slate-500"><%= format.currency(payment.amount_paid) %></div>
+      </a>
+    <% }) %>
+  </div>
+</section>
+<%- include('../partials/footer') %>

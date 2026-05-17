@@ -1,0 +1,34 @@
+<%- include('../partials/header') %>
+<% const isEdit = !!payment; %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Pembayaran</p>
+    <h1><%= isEdit ? 'Edit Pembayaran' : 'Tambah Pembayaran' %></h1>
+    <p class="text-sm text-slate-500">Saldo tersedia: <strong><%= format.currency(balance) %></strong></p>
+  </div>
+  <a href="/payments" class="btn-secondary">Kembali</a>
+</div>
+<form method="post" enctype="multipart/form-data" action="<%= isEdit ? `/payments/${payment.id}?_method=PUT` : '/payments' %>" class="form-card max-w-2xl">
+  <h2>Form Pembayaran</h2>
+  <div class="space-y-4">
+    <label>
+      <span class="form-label">Nota</span>
+      <select name="invoice_id" class="form-input" <%= isEdit ? 'disabled' : 'required' %>>
+        <option value="">Pilih nota</option>
+        <% notas.forEach((nota) => { %>
+          <option value="<%= nota.id %>" <%= selectedNotaId === nota.id ? 'selected' : '' %>><%= nota.invoice_number %> - <%= format.currency(nota.total_amount) %></option>
+        <% }) %>
+      </select>
+      <% if (isEdit) { %><input type="hidden" name="invoice_id" value="<%= payment.invoice_id %>"><% } %>
+    </label>
+    <label><span class="form-label">Tanggal Pembayaran</span><input type="date" name="payment_date" value="<%= isEdit ? format.dateInput(payment.payment_date) : today %>" class="form-input" <%= isEdit ? 'readonly' : '' %>></label>
+    <label><span class="form-label">Jumlah Bayar</span><input required type="number" name="amount_paid" value="<%= payment?.amount_paid || '' %>" class="form-input"></label>
+    <% if (!isEdit) { %>
+      <label><span class="form-label">Bukti Transfer</span><input required type="file" name="proof" accept="image/*" class="form-input"></label>
+    <% } else if (payment.proof_url) { %>
+      <a class="link" href="<%= payment.proof_url %>" target="_blank">Lihat bukti pembayaran</a>
+    <% } %>
+    <button class="btn-primary"><%= isEdit ? 'Update Pembayaran' : 'Simpan Pembayaran' %></button>
+  </div>
+</form>
+<%- include('../partials/footer') %>
