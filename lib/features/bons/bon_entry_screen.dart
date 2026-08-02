@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +12,8 @@ import '../../core/widgets/zoomable_image_preview.dart';
 import '../../models/bon_model.dart';
 import '../../models/nota_model.dart';
 import '../../models/payment_model.dart';
+import '../../models/factory_model.dart';
+import '../../models/relation_agent_model.dart';
 import '../../providers/providers.dart';
 import '../notas/nota_detail_screen.dart';
 
@@ -47,7 +46,14 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
 
   XFile? _imageFile;
   Uint8List? _imageBytes;
+  String? _ocrImageUrl;
   bool _isProcessing = false;
+  bool _dataLoaded = false;
+  List<RelationAgentModel> _relationAgents = [];
+  List<FactoryModel> _factories = [];
+  String? _selectedRelationAgentId;
+  String? _selectedFactoryId;
+  String? _selectedSpsiTypeId;
 
   // Controllers
   final _ticketNumberController = TextEditingController();
@@ -56,6 +62,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
   final _driverNameController = TextEditingController();
   final _relationNameController = TextEditingController();
   final _fruitOriginController = TextEditingController();
+  final _notesController = TextEditingController();
   final _netto1Controller = TextEditingController();
   final _netto2Controller = TextEditingController();
 
@@ -83,14 +90,28 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
   double get _price =>
       (double.tryParse(_priceController.text) ?? 0).roundToDouble();
   double get _dp => (double.tryParse(_dpController.text) ?? 0).roundToDouble();
-  double get _potLain => _deductionControllers.fold(
+  double get _potonganLain => _deductionControllers.fold(
     0.0,
     (sum, c) => sum + (double.tryParse(c.amount.text) ?? 0),
   );
 
   double get _biayaBongkarRate =>
       double.tryParse(_biayaBongkarController.text) ?? 0;
-  double get _totalBiayaBongkar => _biayaBongkarRate * _netto1;
+  FactorySpsiType? get _selectedSpsiType {
+    for (final factory in _factories) {
+      for (final type in factory.spsiTypes) {
+        if (type.id == _selectedSpsiTypeId) return type;
+      }
+    }
+    return null;
+  }
+
+  double get _spsiRate => _selectedFactoryId == null
+      ? _biayaBongkarRate
+      : (_selectedSpsiType?.amount ?? 0);
+  String get _spsiMode => _selectedSpsiType?.calculationMode ?? 'PER_KG';
+  double get _totalBiayaBongkar =>
+      _spsiMode == 'FIX' ? _spsiRate : _spsiRate * _netto1;
   double get _bpColt => double.tryParse(_bpColtController.text) ?? 0;
   double get _uangMinum => double.tryParse(_uangMinumController.text) ?? 0;
   double get _pph => double.tryParse(_pphController.text) ?? 0;
@@ -99,7 +120,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
 
   double get _total =>
       (_price * _netto2) -
-      (_dp + _totalBiayaBongkar + _bpColt + _pph + _uangMinum + _potLain);
+      (_dp + _totalBiayaBongkar + _bpColt + _pph + _uangMinum + _potonganLain);
 
   DateTime _selectedDate = DateTime.now();
 
@@ -114,7 +135,11 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       _plateNumberController.text = b.plateNumber;
       _driverNameController.text = b.driverName ?? '';
       _relationNameController.text = b.relationName ?? '';
+      _selectedRelationAgentId = b.relationAgentId;
+      _selectedFactoryId = b.factoryId;
+      _selectedSpsiTypeId = b.factorySpsiTypeId;
       _fruitOriginController.text = b.fruitOrigin ?? '';
+      _notesController.text = b.notes ?? '';
       _netto1Controller.text = b.netto1.toInt().toString();
       _netto2Controller.text = b.netto2.toInt().toString();
       _priceController.text = b.price.toInt().toString();
@@ -131,7 +156,8 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
         _addDeductionController();
       }
 
-      _biayaBongkarController.text = b.biayaBongkar.toInt().toString();
+      _biayaBongkarController.text =
+          (b.spsiRate > 0 ? b.spsiRate : b.biayaBongkar).toInt().toString();
       _bpColtController.text = b.bpColt.toInt().toString();
       _uangMinumController.text = b.uangMinum.toInt().toString();
       _pphController.text = b.pph.toInt().toString();
@@ -154,6 +180,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       _pphController.text = '0';
       _fetchLatestPrice();
     }
+    _loadMasterData();
 
     _ticketNumberController.addListener(
       _toUpperCaseListener(_ticketNumberController),
@@ -177,6 +204,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
 
     _dpController.addListener(_updateCalc);
     _pphController.addListener(_updateCalc);
+    _biayaBongkarController.addListener(_updateCalc);
 
     if (widget.initialImage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -190,6 +218,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     setState(() {
       _imageFile = XFile(file.path);
       _imageBytes = bytes;
+      _ocrImageUrl = null;
     });
     await _performOCR(bytes, file.path.split('/').last);
   }
@@ -198,16 +227,20 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     if (!_isReadOnly) {
       final netto = _netto2;
       final price = _price;
-      // PPh = 0.25% * (Harga * Netto2)
-      _setTextIfDifferent(
-        _pphController,
-        (0.0025 * (price * netto)).toInt().toString(),
-      );
-
-      // Update uang minum berdasarkan netto2
-      // Jika netto2 > 8 ton, uang minum 20000, jika <= 8 ton, uang minum 10000
-      final uangMinumValue = netto > 8000 ? '20000' : '10000';
-      _setTextIfDifferent(_uangMinumController, uangMinumValue);
+      // Rule khusus: PT. AWAN ALAM ANUGRA → PPh & Uang Minum = 0
+      if (_selectedFactoryId == 'a536e3c0-7ea0-4003-9df0-c38721a9439b') {
+        _setTextIfDifferent(_pphController, '0');
+        _setTextIfDifferent(_uangMinumController, '0');
+      } else {
+        // PPh = 0.25% * (Harga * Netto2)
+        _setTextIfDifferent(
+          _pphController,
+          (0.0025 * (price * netto)).toInt().toString(),
+        );
+        // Update uang minum berdasarkan netto2
+        final uangMinumValue = netto > 8000 ? '20000' : '10000';
+        _setTextIfDifferent(_uangMinumController, uangMinumValue);
+      }
     }
     _updateCalc();
   }
@@ -229,6 +262,20 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
   }
 
   Future<void> _fetchLatestPrice() async {
+    // Hanya untuk bon baru
+    if (widget.bon != null) return;
+    if (_selectedFactoryId != null) {
+      final factory = _factories
+          .where((f) => f.id == _selectedFactoryId)
+          .firstOrNull;
+      final defaultPrice = factory?.prices
+          .where((p) => p.isDefault)
+          .firstOrNull;
+      if (defaultPrice != null && defaultPrice.price > 0 && mounted) {
+        _priceController.text = defaultPrice.price.toInt().toString();
+        return;
+      }
+    }
     try {
       final price = await ref.read(bonRepositoryProvider).getLatestPrice();
       if (price > 0 && mounted) {
@@ -237,6 +284,119 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadMasterData() async {
+    try {
+      final results = await Future.wait([
+        ref.read(relationAgentRepositoryProvider).getRelationAgents(),
+        ref.read(factoryRepositoryProvider).getFactories(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _dataLoaded = true;
+        _relationAgents = results[0] as List<RelationAgentModel>;
+        _factories = results[1] as List<FactoryModel>;
+        _selectedRelationAgentId ??= _matchRelationIdByName();
+        if (_selectedRelationAgentId != null &&
+            !_relationAgents.any(
+              (item) => item.id == _selectedRelationAgentId,
+            )) {
+          _selectedRelationAgentId = null;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _dataLoaded = true);
+    }
+  }
+
+  String? _matchRelationIdByName() {
+    final current = _relationNameController.text.trim().toUpperCase();
+    if (current.isEmpty) return null;
+    for (final item in _relationAgents) {
+      if (item.name.toUpperCase() == current) return item.id;
+    }
+    return null;
+  }
+
+  String? _matchFactoryIdByName(String factoryName) {
+    final current = factoryName.trim().toUpperCase();
+    if (current.isEmpty) return null;
+    for (final item in _factories) {
+      if (item.name.toUpperCase() == current) return item.id;
+    }
+    return null;
+  }
+
+  RelationAgentModel? get _selectedRelationAgent {
+    for (final item in _relationAgents) {
+      if (item.id == _selectedRelationAgentId) return item;
+    }
+    return null;
+  }
+
+  void _selectRelation(String? relationId) {
+    RelationAgentModel? relation;
+    for (final item in _relationAgents) {
+      if (item.id == relationId) {
+        relation = item;
+        break;
+      }
+    }
+    setState(() {
+      _selectedRelationAgentId = relationId;
+      _relationNameController.text = relation?.name ?? '';
+    });
+  }
+
+  void _selectFactory(String? factoryId) {
+    setState(() {
+      _selectedFactoryId = factoryId;
+      _selectedSpsiTypeId = null;
+      if (factoryId == null) {
+        _setTextIfDifferent(_biayaBongkarController, '12');
+      } else {
+        _setTextIfDifferent(_biayaBongkarController, '0');
+        // Harga default hanya untuk bon baru
+        if (widget.bon == null) {
+          final factory = _factories
+              .where((f) => f.id == factoryId)
+              .firstOrNull;
+          final defaultPrice = factory?.prices
+              .where((p) => p.isDefault)
+              .firstOrNull;
+          if (defaultPrice != null && defaultPrice.price > 0) {
+            _setTextIfDifferent(
+              _priceController,
+              defaultPrice.price.toInt().toString(),
+            );
+          }
+        }
+      }
+    });
+    _recalcPPh();
+  }
+
+  void _selectSpsiType(String? spsiTypeId) {
+    FactorySpsiType? selected;
+    for (final factory in _factories) {
+      for (final type in factory.spsiTypes) {
+        if (type.id == spsiTypeId) {
+          selected = type;
+          break;
+        }
+      }
+      if (selected != null) break;
+    }
+    setState(() {
+      _selectedSpsiTypeId = spsiTypeId;
+      if (selected != null) {
+        _setTextIfDifferent(
+          _biayaBongkarController,
+          selected.amount.toInt().toString(),
+        );
+      }
+    });
   }
 
   void _addDeductionController({String label = '', String amount = '0'}) {
@@ -271,6 +431,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     _driverNameController.dispose();
     _relationNameController.dispose();
     _fruitOriginController.dispose();
+    _notesController.dispose();
     _netto1Controller.dispose();
     _netto2Controller.dispose();
     _priceController.dispose();
@@ -289,6 +450,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       setState(() {
         _imageFile = picked;
         _imageBytes = bytes;
+        _ocrImageUrl = null;
       });
       // Perform OCR
       await _performOCR(bytes, picked.name);
@@ -299,82 +461,31 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      final uri = Uri.parse('https://n8n.langkatkab.go.id/webhook/bon');
-      final request = http.MultipartRequest('POST', uri)
-        ..files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            bytes,
-            filename: fileName,
-            contentType: MediaType('image', 'jpeg'),
+      final settings = await ref
+          .read(ocrSettingsRepositoryProvider)
+          .getSettings();
+      final result = await ref.read(ocrServiceProvider).processBonImage(
+            bytes: bytes,
+            fileName: fileName,
+            settings: settings,
+          );
+
+      _applyOcrData(result.data, imageUrl: result.imageUrl);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Data bon berhasil terbaca'),
+            backgroundColor: Colors.green,
           ),
         );
-
-      final response = await request.send().timeout(const Duration(minutes: 5));
-
-      if (response.statusCode == 200) {
-        final respStr = await response.stream.bytesToString();
-        final data = json.decode(respStr);
-
-        final Map<String, dynamic>? bonData = (data is List && data.isNotEmpty)
-            ? data[0]
-            : (data is Map<String, dynamic> ? data : null);
-
-        if (bonData != null) {
-          setState(() {
-            if (bonData['ticket_number'] != null) {
-              _ticketNumberController.text = bonData['ticket_number']
-                  .toString();
-            }
-            if (bonData['bon_date'] != null) {
-              try {
-                final date = DateTime.parse(bonData['bon_date']);
-                _selectedDate = date;
-                _dateController.text = DateFormat('yyyy-MM-dd').format(date);
-              } catch (_) {}
-            }
-            if (bonData['plate_number'] != null) {
-              _plateNumberController.text = bonData['plate_number'].toString();
-            }
-            if (bonData['driver_name'] != null) {
-              _driverNameController.text = bonData['driver_name'].toString();
-            }
-            if (bonData['relation_name'] != null) {
-              _relationNameController.text = bonData['relation_name']
-                  .toString();
-            }
-            if (bonData['fruit_origin'] != null) {
-              _fruitOriginController.text = bonData['fruit_origin'].toString();
-            }
-            if (bonData['netto_1'] != null) {
-              _netto1Controller.text = bonData['netto_1'].toString();
-            }
-            if (bonData['netto_2'] != null) {
-              _netto2Controller.text = bonData['netto_2'].toString();
-            }
-          });
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Data bon berhasil terbaca'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            // Fetch latest price after OCR
-            _fetchLatestPrice();
-          }
-        } else {
-          throw Exception('Invalid response format');
-        }
-      } else {
-        throw Exception('Server error: ${response.statusCode}');
+        _fetchLatestPrice();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Data bon gagal terbaca'),
+          SnackBar(
+            content: Text('Data bon gagal terbaca: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -384,6 +495,52 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
         setState(() => _isProcessing = false);
       }
     }
+  }
+
+  void _applyOcrData(Map<String, dynamic> bonData, {String? imageUrl}) {
+    setState(() {
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        _ocrImageUrl = imageUrl;
+      }
+      if (bonData['ticket_number'] != null) {
+        _ticketNumberController.text = bonData['ticket_number'].toString();
+      }
+      if (bonData['bon_date'] != null) {
+        try {
+          final date = DateTime.parse(bonData['bon_date'].toString());
+          _selectedDate = date;
+          _dateController.text = DateFormat('yyyy-MM-dd').format(date);
+        } catch (_) {}
+      }
+      if (bonData['plate_number'] != null) {
+        _plateNumberController.text = bonData['plate_number'].toString();
+      }
+      if (bonData['driver_name'] != null) {
+        _driverNameController.text = bonData['driver_name'].toString();
+      }
+      if (bonData['relation_name'] != null) {
+        _relationNameController.text = bonData['relation_name'].toString();
+      }
+      if (bonData['fruit_origin'] != null) {
+        _fruitOriginController.text = bonData['fruit_origin'].toString();
+      }
+      if (bonData['notes'] != null) {
+        _notesController.text = bonData['notes'].toString();
+      }
+      if (bonData['netto_1'] != null) {
+        _netto1Controller.text = bonData['netto_1'].toString();
+      }
+      if (bonData['netto_2'] != null) {
+        _netto2Controller.text = bonData['netto_2'].toString();
+      }
+      _selectedRelationAgentId = _matchRelationIdByName();
+      if (bonData['factory_name'] != null) {
+        _selectedFactoryId = _matchFactoryIdByName(
+          bonData['factory_name'].toString(),
+        );
+        _selectedSpsiTypeId = null;
+      }
+    });
   }
 
   void _showImagePickerOptions() {
@@ -430,7 +587,16 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       plateNumber: _plateNumberController.text,
       driverName: _driverNameController.text,
       relationName: _relationNameController.text,
+      relationAgentId: _selectedRelationAgentId,
+      factoryId: _selectedFactoryId,
+      factoryName: null,
+      factorySpsiTypeId: _selectedSpsiTypeId,
+      spsiTypeName: _selectedSpsiType?.name,
+      spsiCalculationMode: _spsiMode,
+      spsiRate: _spsiRate,
+      spsiAmount: _totalBiayaBongkar,
       fruitOrigin: _fruitOriginController.text,
+      notes: _notesController.text.isNotEmpty ? _notesController.text : null,
       netto1: _netto1,
       netto2: _netto2,
       price: _price,
@@ -448,7 +614,6 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
             ),
           )
           .toList(),
-      potLain: _potLain,
       total: _total,
       status: widget.bon?.status ?? PaymentStatus.belumDibayar,
       imageUrl: widget.bon?.imageUrl,
@@ -459,7 +624,12 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     if (widget.bon == null) {
       return await ref
           .read(bonRepositoryProvider)
-          .createBon(bon, _imageBytes, _imageFile?.name);
+          .createBon(
+            bon,
+            _imageBytes,
+            _imageFile?.name,
+            existingImageUrl: _ocrImageUrl,
+          );
     } else {
       await ref.read(bonRepositoryProvider).updateBon(bon);
       return (await ref.read(bonRepositoryProvider).getBons()).firstWhere(
@@ -485,44 +655,13 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
 
   Future<void> _saveAndShare() async {
     if (!_formKey.currentState!.validate()) return;
-
-    final recipientNameController = TextEditingController();
-    final addressController = TextEditingController();
-
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Detail Penerima Nota'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: recipientNameController,
-              inputFormatters: [UpperCaseTextFormatter()],
-              decoration: const InputDecoration(labelText: 'Nama Penerima'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: addressController,
-              inputFormatters: [UpperCaseTextFormatter()],
-              decoration: const InputDecoration(labelText: 'Alamat'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Simpan & Share'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
+    final relation = _selectedRelationAgent;
+    if (relation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih Relasi / Agen terlebih dahulu.')),
+      );
+      return;
+    }
 
     setState(() => _isProcessing = true);
     try {
@@ -530,18 +669,15 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       if (savedBon == null) return;
 
       // Create an automatic Nota for this Bon
-      final String safeTicketPart = (savedBon.ticketNumber ?? '').replaceAll(
-        RegExp(r'[^a-zA-Z0-9]'),
-        '',
-      );
       final nota = NotaModel(
         id: const Uuid().v4(),
         notaNumber: 'NOTA-${DateTime.now().millisecondsSinceEpoch}',
         notaDate: DateTime.now(),
         totalAmount: savedBon.total,
         status: PaymentStatus.tertagih,
-        recipientName: recipientNameController.text.trim(),
-        recipientAddress: addressController.text.trim(),
+        relationAgentId: relation.id,
+        recipientName: relation.name,
+        recipientAddress: relation.address,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -623,7 +759,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
   }
 
   bool get _isReadOnly =>
-      widget.bon != null && widget.bon!.status != PaymentStatus.belumDibayar;
+      widget.bon != null && widget.bon!.status == PaymentStatus.lunas;
 
   @override
   Widget build(BuildContext context) {
@@ -649,402 +785,422 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
             ),
         ],
       ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildSectionCard(
-                    title: 'Ambil Foto Bon',
-                    icon: Icons.camera_alt_outlined,
-                    children: [_buildImagePicker()],
-                  ),
-                  const SizedBox(height: 16),
-                  if (_isReadOnly) _buildReadOnlyWarning(),
-                  _buildRelatedDocuments(),
-                  _buildSectionCard(
-                    title: 'Info Kendaraan & Supir',
-                    icon: Icons.local_shipping_outlined,
-                    children: [
-                      _buildTextField(
-                        controller: _plateNumberController,
-                        label: 'Nomor Polisi (BK)',
-                        icon: Icons.confirmation_number_outlined,
-                        validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
+      body: _dataLoaded
+          ? Stack(
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildSectionCard(
+                          title: 'Ambil Foto Bon',
+                          icon: Icons.camera_alt_outlined,
+                          children: [_buildImagePicker()],
+                        ),
+                        const SizedBox(height: 16),
+                        if (_isReadOnly) _buildReadOnlyWarning(),
+                        _buildRelatedDocuments(),
+                        _buildSectionCard(
+                          title: 'Info Kendaraan & Supir',
+                          icon: Icons.local_shipping_outlined,
+                          children: [
+                            _buildTextField(
+                              controller: _plateNumberController,
+                              label: 'Nomor Polisi (BK)',
+                              icon: Icons.confirmation_number_outlined,
+                              validator: (v) =>
+                                  v!.isEmpty ? 'Wajib diisi' : null,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildTextField(
                               controller: _driverNameController,
                               label: 'Nama Supir',
                               icon: Icons.person_outline,
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _relationNameController,
-                              label: 'Nama Relasi',
-                              icon: Icons.business_outlined,
+                            const SizedBox(height: 16),
+                            _buildRelationDropdown(),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(child: _buildFactoryDropdown()),
+                                const SizedBox(width: 16),
+                                Expanded(child: _buildSpsiTypeDropdown()),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _fruitOriginController,
-                        label: 'Asal Buah',
-                        icon: Icons.location_on_outlined,
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-                  _buildSectionCard(
-                    title: 'Data Timbangan (Tiket)',
-                    icon: Icons.scale,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _ticketNumberController,
-                              label: 'No. Tiket / Bon',
+                            const SizedBox(height: 16),
+                            _buildTextField(
+                              controller: _fruitOriginController,
+                              label: 'Asal Buah',
+                              icon: Icons.location_on_outlined,
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _dateController,
-                              readOnly: true,
-                              decoration: _inputDecoration(
-                                label: 'Tanggal',
-                                icon: Icons.calendar_today,
-                              ),
-                              onTap: _isReadOnly
-                                  ? null
-                                  : () async {
-                                      final picked = await showDatePicker(
-                                        context: context,
-                                        initialDate: _selectedDate,
-                                        firstDate: DateTime(2000),
-                                        lastDate: DateTime(2100),
-                                      );
-                                      if (picked != null) {
-                                        setState(() {
-                                          _selectedDate = picked;
-                                          _dateController.text = DateFormat(
-                                            'yyyy-MM-dd',
-                                          ).format(picked);
-                                        });
-                                      }
-                                    },
+                            const SizedBox(height: 16),
+                            _buildTextField(
+                              controller: _notesController,
+                              label: 'Catatan',
+                              icon: Icons.notes_outlined,
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _netto1Controller,
-                              label: 'Netto 1 (Bongkar)',
-                              isNumber: true,
-                              suffixText: 'kg',
-                              validator: (v) => v!.isEmpty ? 'Wajib' : null,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _netto2Controller,
-                              label: 'Netto 2 (Bayar)',
-                              isNumber: true,
-                              suffixText: 'kg',
-                              validator: (v) => v!.isEmpty ? 'Wajib' : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-                  _buildSectionCard(
-                    title: 'Kalkulasi Keuangan',
-                    icon: Icons.monetization_on_outlined,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _priceController,
-                              label: 'Harga / kg',
-                              isNumber: true,
-                              prefixText: 'Rp',
-                              validator: (v) => v!.isEmpty ? 'Wajib' : null,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _dpController,
-                              label: 'DP / Panjar',
-                              isNumber: true,
-                              prefixText: 'Rp',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      _buildCalcRow(
-                        'Subtotal (Netto 2 x Harga)',
-                        _subtotal,
-                        isSubTotal: true,
-                      ),
-                      const Divider(height: 24),
-
-                      const Text(
-                        'Potongan & Biaya',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: Colors.indigo,
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _biayaBongkarController,
-                              label: 'Bongkar (Rp/Kg)',
-                              isNumber: true,
-                              hint: '12',
+
+                        const SizedBox(height: 16),
+                        _buildSectionCard(
+                          title: 'Data Timbangan (Tiket)',
+                          icon: Icons.scale,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _ticketNumberController,
+                                    label: 'No. Tiket / Bon',
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _dateController,
+                                    readOnly: true,
+                                    decoration: _inputDecoration(
+                                      label: 'Tanggal',
+                                      icon: Icons.calendar_today,
+                                    ),
+                                    onTap: _isReadOnly
+                                        ? null
+                                        : () async {
+                                            final picked = await showDatePicker(
+                                              context: context,
+                                              initialDate: _selectedDate,
+                                              firstDate: DateTime(2000),
+                                              lastDate: DateTime(2100),
+                                            );
+                                            if (picked != null) {
+                                              setState(() {
+                                                _selectedDate = picked;
+                                                _dateController.text =
+                                                    DateFormat(
+                                                      'yyyy-MM-dd',
+                                                    ).format(picked);
+                                              });
+                                            }
+                                          },
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _bpColtController,
-                              label: 'BP Colt',
-                              isNumber: true,
-                              hint: '100.000',
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _netto1Controller,
+                                    label: 'Netto 1 (Bongkar)',
+                                    isNumber: true,
+                                    suffixText: 'kg',
+                                    validator: (v) =>
+                                        v!.isEmpty ? 'Wajib' : null,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _netto2Controller,
+                                    label: 'Netto 2 (Bayar)',
+                                    isNumber: true,
+                                    suffixText: 'kg',
+                                    validator: (v) =>
+                                        v!.isEmpty ? 'Wajib' : null,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _pphController,
-                              label: 'PPh 0.25%',
-                              isNumber: true,
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+                        _buildSectionCard(
+                          title: 'Kalkulasi Keuangan',
+                          icon: Icons.monetization_on_outlined,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _priceController,
+                                    label: 'Harga / kg',
+                                    isNumber: true,
+                                    prefixText: 'Rp',
+                                    validator: (v) =>
+                                        v!.isEmpty ? 'Wajib' : null,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _dpController,
+                                    label: 'DP / Panjar',
+                                    isNumber: true,
+                                    prefixText: 'Rp',
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _uangMinumController,
-                              label: 'Uang Minum',
-                              isNumber: true,
-                              hint: '10.000',
+                            const SizedBox(height: 24),
+                            _buildCalcRow(
+                              'Subtotal (Netto 2 x Harga)',
+                              _subtotal,
+                              isSubTotal: true,
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Potongan Lain-lain',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: Colors.indigo,
-                            ),
-                          ),
-                          if (!_isReadOnly)
-                            IconButton(
-                              onPressed: _addDeductionController,
-                              icon: const Icon(
-                                Icons.add_circle_outline,
+                            const Divider(height: 24),
+
+                            const Text(
+                              'Potongan & Biaya',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
                                 color: Colors.indigo,
                               ),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
                             ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _deductionControllers.length,
-                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _biayaBongkarController,
+                                    label: _spsiMode == 'FIX'
+                                        ? 'Bongkar / SPSI (Fix)'
+                                        : 'Bongkar (Rp/Kg)',
+                                    isNumber: true,
+                                    hint: '12',
+                                    readOnlyOverride:
+                                        _selectedFactoryId != null ||
+                                        _isReadOnly,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _bpColtController,
+                                    label: 'BP Colt',
+                                    isNumber: true,
+                                    hint: '100.000',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _pphController,
+                                    label: 'PPh 0.25%',
+                                    isNumber: true,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _uangMinumController,
+                                    label: 'Uang Minum',
+                                    isNumber: true,
+                                    hint: '10.000',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Potongan Lain-lain',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Colors.indigo,
+                                  ),
+                                ),
+                                if (!_isReadOnly)
+                                  IconButton(
+                                    onPressed: _addDeductionController,
+                                    icon: const Icon(
+                                      Icons.add_circle_outline,
+                                      color: Colors.indigo,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                              ],
+                            ),
                             const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final ctrls = _deductionControllers[index];
-                          return Row(
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _deductionControllers.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final ctrls = _deductionControllers[index];
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: _buildTextField(
+                                        controller: ctrls.label,
+                                        label: 'Nama Potongan',
+                                        forceUpperCase: false,
+                                        // hint: 'Contoh: Roling',
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      flex: 1,
+                                      child: _buildTextField(
+                                        controller: ctrls.amount,
+                                        label: 'Besaran',
+                                        isNumber: true,
+                                      ),
+                                    ),
+                                    if (!_isReadOnly &&
+                                        _deductionControllers.length > 1)
+                                      IconButton(
+                                        onPressed: () =>
+                                            _removeDeductionController(index),
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+
+                            const Divider(height: 32, thickness: 1.5),
+                            _buildCalcRow(
+                              'TOTAL DIBAYAR',
+                              _total,
+                              isTotal: true,
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 32),
+                        if (!_isReadOnly)
+                          Row(
                             children: [
                               Expanded(
                                 flex: 2,
-                                child: _buildTextField(
-                                  controller: ctrls.label,
-                                  label: 'Nama Potongan',
-                                  forceUpperCase: false,
-                                  // hint: 'Contoh: Roling',
+                                child: SizedBox(
+                                  height: 54,
+                                  child: ElevatedButton(
+                                    onPressed: _isProcessing ? null : _save,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: const Color(0xFF4318FF),
+                                      elevation: 2,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        side: const BorderSide(
+                                          color: Color(0xFF4318FF),
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
+                                    child: _isProcessing
+                                        ? const SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Color(0xFF4318FF),
+                                            ),
+                                          )
+                                        : const Text(
+                                            'SIMPAN',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 12),
                               Expanded(
-                                flex: 1,
-                                child: _buildTextField(
-                                  controller: ctrls.amount,
-                                  label: 'Besaran',
-                                  isNumber: true,
-                                ),
-                              ),
-                              if (!_isReadOnly &&
-                                  _deductionControllers.length > 1)
-                                IconButton(
-                                  onPressed: () =>
-                                      _removeDeductionController(index),
-                                  icon: const Icon(
-                                    Icons.remove_circle_outline,
-                                    color: Colors.red,
+                                flex: 3,
+                                child: SizedBox(
+                                  height: 54,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _isProcessing
+                                        ? null
+                                        : _saveAndShare,
+                                    icon: const Icon(Icons.share, size: 18),
+                                    label: _isProcessing
+                                        ? const SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'SIMPAN & SHARE',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF4318FF),
+                                      foregroundColor: Colors.white,
+                                      elevation: 5,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      shadowColor: const Color(
+                                        0xFF4318FF,
+                                      ).withOpacity(0.4),
+                                    ),
                                   ),
                                 ),
+                              ),
                             ],
-                          );
-                        },
-                      ),
-
-                      const Divider(height: 32, thickness: 1.5),
-                      _buildCalcRow('TOTAL DIBAYAR', _total, isTotal: true),
-                    ],
-                  ),
-
-                  const SizedBox(height: 32),
-                  if (!_isReadOnly)
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: SizedBox(
-                            height: 54,
-                            child: ElevatedButton(
-                              onPressed: _isProcessing ? null : _save,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: const Color(0xFF4318FF),
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  side: const BorderSide(
-                                    color: Color(0xFF4318FF),
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                              child: _isProcessing
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Color(0xFF4318FF),
-                                      ),
-                                    )
-                                  : const Text(
-                                      'SIMPAN',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 3,
-                          child: SizedBox(
-                            height: 54,
-                            child: ElevatedButton.icon(
-                              onPressed: _isProcessing ? null : _saveAndShare,
-                              icon: const Icon(Icons.share, size: 18),
-                              label: _isProcessing
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'SIMPAN & SHARE',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF4318FF),
-                                foregroundColor: Colors.white,
-                                elevation: 5,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                shadowColor: const Color(
-                                  0xFF4318FF,
-                                ).withOpacity(0.4),
-                              ),
-                            ),
-                          ),
-                        ),
+                        const SizedBox(height: 40),
                       ],
                     ),
-                  const SizedBox(height: 40),
-                ],
-              ),
-            ),
-          ),
-          if (_isProcessing)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: Color(0xFF4318FF)),
-                    SizedBox(height: 16),
-                    Text(
-                      'Membaca data bon...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                  ),
+                ),
+                if (_isProcessing)
+                  Container(
+                    color: Colors.black.withOpacity(0.3),
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Color(0xFF4318FF)),
+                          SizedBox(height: 16),
+                          Text(
+                            'Membaca data bon...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
+                  ),
+              ],
+            )
+          : const Center(child: CircularProgressIndicator()),
     );
   }
 
@@ -1090,6 +1246,185 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     );
   }
 
+  Widget _buildRelationDropdown() {
+    return DropdownButtonFormField<String>(
+      key: ValueKey('relation-$_selectedRelationAgentId'),
+      initialValue: _selectedRelationAgentId,
+      isExpanded: true,
+      decoration: _inputDecoration(
+        label: 'Relasi / Agen',
+        icon: Icons.business_outlined,
+      ),
+      items: [
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('Pilih Relasi / Agen'),
+        ),
+        ..._relationAgents.map(
+          (item) => DropdownMenuItem<String>(
+            value: item.id,
+            child: Text(item.name, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+        const DropdownMenuItem<String>(
+          value: '__add_new__',
+          child: Row(
+            children: [
+              Icon(Icons.add_circle_outline, size: 18, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text(
+                'Tambah Relasi Baru...',
+                style: TextStyle(color: Colors.indigo),
+              ),
+            ],
+          ),
+        ),
+      ],
+      onChanged: _isReadOnly
+          ? null
+          : (value) {
+              if (value == '__add_new__') {
+                _showAddRelationDialog();
+              } else {
+                _selectRelation(value);
+              }
+            },
+      validator: (value) =>
+          value == null || value.isEmpty ? 'Wajib diisi' : null,
+    );
+  }
+
+  Future<void> _showAddRelationDialog() async {
+    final nameController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final result = await showDialog<RelationAgentModel>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tambah Relasi Baru'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              labelText: 'Nama Relasi / Agen',
+              border: OutlineInputBorder(),
+            ),
+            textCapitalization: TextCapitalization.characters,
+            validator: (v) =>
+                v == null || v.trim().isEmpty ? 'Wajib diisi' : null,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              try {
+                final repo = ref.read(relationAgentRepositoryProvider);
+                final now = DateTime.now();
+                final id = const Uuid().v4();
+                await repo.createRelationAgent(
+                  RelationAgentModel(
+                    id: id,
+                    name: nameController.text.trim().toUpperCase(),
+                    createdAt: now,
+                    updatedAt: now,
+                  ),
+                );
+                final updated = await repo.getRelationAgents();
+                if (ctx.mounted) {
+                  Navigator.pop(
+                    ctx,
+                    RelationAgentModel(
+                      id: id,
+                      name: nameController.text.trim().toUpperCase(),
+                      createdAt: now,
+                      updatedAt: now,
+                    ),
+                  );
+                }
+                if (mounted) {
+                  setState(() => _relationAgents = updated);
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Gagal menyimpan: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && mounted) {
+      _selectRelation(result.id);
+    }
+  }
+
+  Widget _buildFactoryDropdown() {
+    return DropdownButtonFormField<String>(
+      key: ValueKey('factory-$_selectedFactoryId'),
+      initialValue: _selectedFactoryId,
+      isExpanded: true,
+      decoration: _inputDecoration(
+        label: 'Pabrik',
+        icon: Icons.factory_outlined,
+      ),
+      items: [
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('Tanpa Pabrik'),
+        ),
+        ..._factories.map(
+          (factory) => DropdownMenuItem<String>(
+            value: factory.id,
+            child: Text(factory.name, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: _isReadOnly ? null : _selectFactory,
+    );
+  }
+
+  Widget _buildSpsiTypeDropdown() {
+    final factoryTypes = _factories
+        .where((item) => item.id == _selectedFactoryId)
+        .expand((item) => item.spsiTypes)
+        .toList();
+    return DropdownButtonFormField<String>(
+      key: ValueKey('spsi-$_selectedFactoryId-$_selectedSpsiTypeId'),
+      initialValue: _selectedSpsiTypeId,
+      isExpanded: true,
+      decoration: _inputDecoration(
+        label: 'Jenis SPSI',
+        icon: Icons.price_check_outlined,
+      ),
+      items: [
+        const DropdownMenuItem<String>(value: null, child: Text('Pilih SPSI')),
+        ...factoryTypes.map(
+          (type) => DropdownMenuItem<String>(
+            value: type.id,
+            child: Text(
+              '${type.name} (${type.calculationMode == 'FIX' ? 'Fix' : 'Per/Kg'})',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ],
+      onChanged: _isReadOnly ? null : _selectSpsiType,
+      validator: (value) =>
+          _selectedFactoryId != null && (value == null || value.isEmpty)
+          ? 'Wajib diisi'
+          : null,
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -1100,6 +1435,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     String? suffixText,
     String? Function(String?)? validator,
     String? hint,
+    bool? readOnlyOverride,
   }) {
     return Focus(
       onFocusChange: (hasFocus) {
@@ -1117,7 +1453,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       },
       child: TextFormField(
         controller: controller,
-        readOnly: _isReadOnly,
+        readOnly: readOnlyOverride ?? _isReadOnly,
         keyboardType: isNumber ? TextInputType.number : TextInputType.text,
         inputFormatters: isNumber || !forceUpperCase
             ? null
@@ -1184,7 +1520,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
-              'Data bon ini dikunci karena sudah diproses (Lunas/Nota).',
+              'Data bon ini dikunci karena sudah dibuat nota atau sudah lunas.',
               style: TextStyle(
                 color: Colors.orangeAccent,
                 fontWeight: FontWeight.bold,

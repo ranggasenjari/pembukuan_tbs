@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../models/margin_model.dart';
 import '../../models/payment_model.dart';
+import '../../models/factory_model.dart';
 import '../../providers/providers.dart';
 
 class MarginEntryScreen extends ConsumerStatefulWidget {
@@ -16,12 +17,14 @@ class MarginEntryScreen extends ConsumerStatefulWidget {
 
 class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
   List<Map<String, dynamic>> _payments = [];
+  List<FactoryModel> _factories = [];
   bool _isLoading = true;
   String? _errorMessage;
 
   final Set<String> _selectedPaymentIds = {};
   final Map<String, PaymentModel> _paymentMap = {};
   final TextEditingController _amountController = TextEditingController();
+  String? _selectedFactoryId;
   DateTime _transactionDate = DateTime.now();
   final _formKey = GlobalKey<FormState>();
   bool _isSubstituting = false;
@@ -31,6 +34,7 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
     super.initState();
     if (widget.marginToEdit != null) {
       _transactionDate = widget.marginToEdit!.transactionDate;
+      _selectedFactoryId = widget.marginToEdit!.factoryId;
       _amountController.text = NumberFormat.currency(
         locale: 'id_ID',
         symbol: '',
@@ -42,9 +46,14 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
 
   Future<void> _loadData() async {
     try {
-      final items = await ref
-          .read(paymentRepositoryProvider)
-          .getUnassignedPayments(includeMarginId: widget.marginToEdit?.id);
+      final results = await Future.wait([
+        ref
+            .read(paymentRepositoryProvider)
+            .getUnassignedPayments(includeMarginId: widget.marginToEdit?.id),
+        ref.read(factoryRepositoryProvider).getFactories(),
+      ]);
+      final items = results[0] as List<Map<String, dynamic>>;
+      final factories = results[1] as List<FactoryModel>;
 
       final Map<String, PaymentModel> tempMap = {};
       final Set<String> initialSelection = {};
@@ -63,6 +72,7 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
       if (mounted) {
         setState(() {
           _payments = items;
+          _factories = factories;
           _paymentMap.addAll(tempMap);
           _selectedPaymentIds.addAll(initialSelection);
           _isLoading = false;
@@ -116,6 +126,8 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
           realAmount: _totalRealAmount,
           marginAmount: offtakerAmount - _totalRealAmount,
           createdAt: widget.marginToEdit!.createdAt,
+          factoryId: _selectedFactoryId,
+          factoryName: null,
         );
 
         await ref
@@ -130,6 +142,7 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
             .read(marginRepositoryProvider)
             .createMargin(
               transactionDate: _transactionDate,
+              factoryId: _selectedFactoryId,
               offtakerAmount: offtakerAmount,
               selectedPayments: selectedPayments,
             );
@@ -218,6 +231,19 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
                             final notaNumber = item['notas'] != null
                                 ? item['notas']['invoice_number']
                                 : '-';
+                            final recipientName = item['notas'] != null
+                                ? item['notas']['recipient_name'] ?? '-'
+                                : '-';
+                            final notaItems =
+                                (item['notas']?['nota_items'] as List?) ?? [];
+                            final bonSummary = notaItems
+                                .map((row) => row['bons'])
+                                .where((bon) => bon != null)
+                                .map(
+                                  (bon) =>
+                                      '${NumberFormat.decimalPattern().format((bon['netto_2'] as num?)?.toInt() ?? 0)} kg @ ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format((bon['price'] as num?)?.toInt() ?? 0)}',
+                                )
+                                .join(' - ');
                             final amount = (item['amount_paid'] as num)
                                 .toDouble();
                             final date = DateTime.parse(item['payment_date']);
@@ -265,14 +291,34 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
                                     }
                                   });
                                 },
-                                title: Text(
-                                  notaNumber,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isOriginal
-                                        ? Colors.green.shade700
-                                        : const Color(0xFF1B2559),
-                                  ),
+                                title: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      notaNumber,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: isOriginal
+                                            ? Colors.green.shade700
+                                            : const Color(0xFF1B2559),
+                                      ),
+                                    ),
+                                    Text(
+                                      recipientName,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    if (bonSummary.isNotEmpty)
+                                      Text(
+                                        bonSummary,
+                                        style: TextStyle(
+                                          color: Colors.grey.shade500,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                                 subtitle: Padding(
                                   padding: const EdgeInsets.only(top: 4),
@@ -358,6 +404,31 @@ class _MarginEntryScreenState extends ConsumerState<MarginEntryScreen> {
                               ],
                             ),
                           ),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          value: _selectedFactoryId,
+                          decoration: InputDecoration(
+                            labelText: 'Sumber Pembayaran Pabrik',
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('Pilih Pabrik'),
+                            ),
+                            ..._factories.map(
+                              (factory) => DropdownMenuItem<String>(
+                                value: factory.id,
+                                child: Text(factory.name),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _selectedFactoryId = value),
                         ),
                         const SizedBox(height: 16),
                         Row(

@@ -4,9 +4,9 @@
     <p class="eyebrow">Pengeluaran</p>
     <h1>Tambah Pengeluaran</h1>
   </div>
-  <a href="/expenses" class="btn-secondary">Kembali</a>
+  <a href="<%= url('/expenses') %>" class="btn-secondary">Kembali</a>
 </div>
-<form method="post" action="/expenses" class="space-y-5">
+<form method="post" action="<%= url('/expenses') %>" class="space-y-5">
   <section class="form-card max-w-2xl">
     <h2>Informasi Pengeluaran</h2>
     <label><span class="form-label">Nama Penerima</span><input required name="recipient_name" class="form-input"></label>
@@ -32,5 +32,5 @@
   </section>
   <button class="btn-primary">Simpan Pengeluaran</button>
 </form>
-<script src="/js/sum-checks.js"></script>
+<script src="<%= url('/js/sum-checks.js') %>"></script>
 <%- include('../partials/footer') %>

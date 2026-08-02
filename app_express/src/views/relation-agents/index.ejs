@@ -1,0 +1,34 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Master Data</p>
+    <h1>Relasi / Agen</h1>
+  </div>
+  <a href="<%= url('/relation-agents/new') %>" class="btn-primary">Tambah Relasi / Agen</a>
+</div>
+
+<form class="filter-bar">
+  <input name="q" value="<%= filters.q || '' %>" class="form-input compact" placeholder="Cari nama, alamat, kontak">
+  <button class="btn-secondary">Filter</button>
+</form>
+
+<div class="table-card">
+  <table>
+    <thead><tr><th>Nama</th><th>Kontak</th><th>Rekening</th><th></th></tr></thead>
+    <tbody>
+      <% if (!relationAgents.length) { %><tr><td colspan="4" class="empty">Belum ada data relasi / agen.</td></tr><% } %>
+      <% relationAgents.forEach((item) => { %>
+        <tr>
+          <td>
+            <div class="font-bold"><%= item.name %></div>
+            <div class="text-xs text-slate-500"><%= item.address || '-' %></div>
+          </td>
+          <td><%= item.contact || '-' %></td>
+          <td><%= (item.relation_agent_accounts || []).length %> rekening</td>
+          <td class="text-right"><a href="<%= url(`/relation-agents/${item.id}`) %>" class="link">Detail</a></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../partials/footer') %>

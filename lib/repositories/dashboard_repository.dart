@@ -35,7 +35,7 @@ class DashboardRepository {
 
   Future<DashboardStats> getDashboardStats(DateTime start, DateTime end) async {
     final startIso = start.toIso8601String();
-    final nextDayEndIso = end.add(const Duration(days: 1)).toIso8601String();
+    final nextDayEndIso = DateTime.utc(end.year, end.month, end.day + 1).toIso8601String();
 
     // 1. Bons Stats
     final bonsResponse = await _client

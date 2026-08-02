@@ -18,7 +18,7 @@ class DepositRepository {
     }
     if (endDate != null) {
       // Add one day to include the end date fully
-      final nextDay = endDate.add(const Duration(days: 1));
+      final nextDay = DateTime.utc(endDate.year, endDate.month, endDate.day + 1);
       query = query.lt('created_at', nextDay.toIso8601String());
     }
     if (category != null && category.isNotEmpty && category != 'Semua') {

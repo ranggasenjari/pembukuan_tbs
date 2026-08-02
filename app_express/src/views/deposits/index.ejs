@@ -7,7 +7,7 @@
   </div>
 </div>
 <section class="grid gap-5 lg:grid-cols-[360px_1fr]">
-  <form method="post" action="/deposits" class="form-card">
+  <form method="post" action="<%= url('/deposits') %>" class="form-card">
     <h2>Tambah Saldo</h2>
     <label><span class="form-label">Kategori</span><select name="category" required class="form-input"><option value="piutang">Piutang</option><option value="kredit">Kredit</option></select></label>
     <label><span class="form-label">Keterangan Sumber</span><input name="source" required class="form-input"></label>
@@ -34,7 +34,7 @@
             <tr>
               <td><%= format.dateTime(deposit.created_at) %></td>
               <td>
-                <form id="deposit-<%= deposit.id %>" method="post" action="/deposits/<%= deposit.id %>?_method=PUT" class="grid gap-2 md:grid-cols-2">
+                <form id="deposit-<%= deposit.id %>" method="post" action="<%= url(`/deposits/${deposit.id}?_method=PUT`) %>" class="grid gap-2 md:grid-cols-2">
                   <input name="source" value="<%= deposit.source %>" class="form-input compact">
                   <input name="amount" type="number" value="<%= deposit.amount %>" class="form-input compact">
                   <input type="hidden" name="category" value="<%= deposit.category || '' %>">
@@ -44,7 +44,7 @@
               <td class="font-bold"><%= format.currency(deposit.amount) %></td>
               <td class="text-right">
                 <button form="deposit-<%= deposit.id %>" class="link">Update</button>
-                <form method="post" action="/deposits/<%= deposit.id %>?_method=DELETE" data-confirm="Hapus saldo ini?" class="inline"><button class="link danger">Hapus</button></form>
+                <form method="post" action="<%= url(`/deposits/${deposit.id}?_method=DELETE`) %>" data-confirm="Hapus saldo ini?" class="inline"><button class="link danger">Hapus</button></form>
               </td>
             </tr>
           <% }) %>

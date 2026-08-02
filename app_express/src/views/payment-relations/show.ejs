@@ -1,0 +1,57 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Relasi Bayar</p>
+    <h1><%= paymentRelation.name %></h1>
+  </div>
+  <div class="flex gap-2">
+    <a href="<%= url(`/payment-relations/${paymentRelation.id}/edit`) %>" class="btn-secondary">Edit</a>
+    <a href="<%= url('/payment-relations') %>" class="btn-secondary">Kembali</a>
+  </div>
+</div>
+
+<section class="form-card">
+  <h2>Informasi Relasi Bayar</h2>
+  <dl class="detail-list">
+    <dt>Nama</dt><dd><%= paymentRelation.name %></dd>
+    <dt>Kontak</dt><dd><%= paymentRelation.contact || '-' %></dd>
+    <dt>Alamat / Asal</dt><dd><%= paymentRelation.address || '-' %></dd>
+    <dt>Catatan</dt><dd><%= paymentRelation.notes || '-' %></dd>
+  </dl>
+</section>
+
+<div class="grid gap-5 lg:grid-cols-2 mt-5">
+  <section class="form-card">
+    <h2>Kendaraan</h2>
+    <% const vehicles = paymentRelation.payment_relation_vehicles || []; %>
+    <% if (!vehicles.length) { %><p class="empty">Belum ada kendaraan.</p><% } %>
+    <div class="space-y-3">
+      <% vehicles.forEach((row) => { const vehicle = row.vehicles || {}; %>
+        <div class="select-row">
+          <span><strong><%= vehicle.plate_number || '-' %></strong><small><%= vehicle.driver_name || '-' %></small></span>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <h2>Rekening</h2>
+    <% const accounts = paymentRelation.payment_relation_accounts || []; %>
+    <% if (!accounts.length) { %><p class="empty">Belum ada rekening.</p><% } %>
+    <div class="space-y-3">
+      <% accounts.forEach((account) => { %>
+        <div class="select-row">
+          <span>
+            <strong><%= account.bank_name || '-' %></strong>
+            <small><%= account.account_number || '-' %> - <%= account.account_name || '-' %></small>
+          </span>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+</div>
+
+<form method="post" action="<%= url(`/payment-relations/${paymentRelation.id}?_method=DELETE`) %>" data-confirm="Hapus relasi bayar ini?" class="mt-5">
+  <button class="link danger">Hapus Relasi Bayar</button>
+</form>
+<%- include('../partials/footer') %>

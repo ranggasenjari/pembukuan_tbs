@@ -6,9 +6,9 @@
     <h1><%= isEdit ? 'Edit Pembayaran' : 'Tambah Pembayaran' %></h1>
     <p class="text-sm text-slate-500">Saldo tersedia: <strong><%= format.currency(balance) %></strong></p>
   </div>
-  <a href="/payments" class="btn-secondary">Kembali</a>
+  <a href="<%= url('/payments') %>" class="btn-secondary">Kembali</a>
 </div>
-<form method="post" enctype="multipart/form-data" action="<%= isEdit ? `/payments/${payment.id}?_method=PUT` : '/payments' %>" class="form-card max-w-2xl">
+<form method="post" enctype="multipart/form-data" action="<%= url(isEdit ? `/payments/${payment.id}?_method=PUT` : '/payments') %>" class="form-card max-w-2xl">
   <h2>Form Pembayaran</h2>
   <div class="space-y-4">
     <label>

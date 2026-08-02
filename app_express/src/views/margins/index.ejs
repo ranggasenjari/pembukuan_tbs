@@ -4,7 +4,7 @@
     <p class="eyebrow">Keuangan</p>
     <h1>Margin / Offtaker</h1>
   </div>
-  <a href="/margins/new" class="btn-primary">Input Margin</a>
+  <a href="<%= url('/margins/new') %>" class="btn-primary">Input Margin</a>
 </div>
 <form class="filter-bar">
   <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
@@ -13,18 +13,19 @@
 </form>
 <div class="table-card">
   <table>
-    <thead><tr><th>Tanggal</th><th>Offtaker</th><th>Real</th><th>Margin</th><th></th></tr></thead>
+    <thead><tr><th>Tanggal</th><th>Pabrik</th><th>Offtaker</th><th>Real</th><th>Margin</th><th></th></tr></thead>
     <tbody>
-      <% if (!margins.length) { %><tr><td colspan="5" class="empty">Belum ada margin.</td></tr><% } %>
+      <% if (!margins.length) { %><tr><td colspan="6" class="empty">Belum ada margin.</td></tr><% } %>
       <% margins.forEach((margin) => { %>
         <tr>
           <td><%= format.date(margin.transaction_date) %></td>
+          <td><%= margin.factories?.name || '-' %></td>
           <td><%= format.currency(margin.offtaker_amount) %></td>
           <td><%= format.currency(margin.real_amount) %></td>
           <td class="font-bold text-emerald-700"><%= format.currency(margin.margin_amount) %></td>
           <td class="text-right">
-            <a href="/margins/<%= margin.id %>/edit" class="link">Edit</a>
-            <form method="post" action="/margins/<%= margin.id %>?_method=DELETE" data-confirm="Hapus margin ini?" class="inline"><button class="link danger">Hapus</button></form>
+            <a href="<%= url(`/margins/${margin.id}/edit`) %>" class="link">Edit</a>
+            <form method="post" action="<%= url(`/margins/${margin.id}?_method=DELETE`) %>" data-confirm="Hapus margin ini?" class="inline"><button class="link danger">Hapus</button></form>
           </td>
         </tr>
       <% }) %>

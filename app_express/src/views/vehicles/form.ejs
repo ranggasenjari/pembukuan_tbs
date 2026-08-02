@@ -1,0 +1,59 @@
+<%- include('../partials/header') %>
+<% const item = vehicle || {}; %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Master Data</p>
+    <h1><%= vehicle ? 'Edit Kendaraan' : 'Tambah Kendaraan' %></h1>
+  </div>
+  <a href="<%= url('/vehicles') %>" class="btn-secondary">Kembali</a>
+</div>
+<form method="post" action="<%= url(vehicle ? `/vehicles/${vehicle.id}?_method=PUT` : '/vehicles') %>" class="space-y-5">
+  <section class="form-card">
+    <h2>Data Kendaraan</h2>
+    <div class="grid gap-4 md:grid-cols-2">
+      <label>
+        <span class="form-label">Plat Nomor</span>
+        <input required name="plate_number" value="<%= item.plate_number || '' %>" class="form-input uppercase" placeholder="Contoh: BL1234AB">
+      </label>
+      <label>
+        <span class="form-label">Nama Driver</span>
+        <input name="driver_name" value="<%= item.driver_name || '' %>" class="form-input uppercase">
+      </label>
+      <label>
+        <span class="form-label">Potongan BP</span>
+        <div class="bp-pills" style="display:flex;gap:4px;margin-top:4px">
+          <% const bpVal = item.potongan_bp ?? 100000; %>
+          <label class="bp-pill <%= bpVal == 0 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="0" <%= bpVal == 0 ? 'checked' : '' %>>0</label>
+          <label class="bp-pill <%= bpVal == 50000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="50000" <%= bpVal == 50000 ? 'checked' : '' %>>50</label>
+          <label class="bp-pill <%= bpVal == 70000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="70000" <%= bpVal == 70000 ? 'checked' : '' %>>70</label>
+          <label class="bp-pill <%= bpVal == 100000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="100000" <%= bpVal == 100000 ? 'checked' : '' %>>100</label>
+          <label class="bp-pill <%= bpVal == 150000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="150000" <%= bpVal == 150000 ? 'checked' : '' %>>150</label>
+        </div>
+      </label>
+      <label>
+        <span class="form-label">Harga/Kg (Rp)</span>
+        <input name="harga" value="<%= item.harga ?? '' %>" type="number" class="form-input" placeholder="Kosongkan/0 = tidak khusus">
+        <span class="text-xs text-slate-400 mt-1">Isi <b>di luar -100 s.d. 100</b> = harga tetap. Isi <b>antara -100 s.d. 100</b> = selisih dari harga pabrik (contoh: -10 berarti harga pabrik -10, 20 berarti harga pabrik +20)</span>
+      </label>
+      <label class="flex items-center gap-2 mt-2">
+        <input type="checkbox" name="is_super" value="1" <%= item.is_super ? 'checked' : '' %> class="form-checkbox">
+        <span class="text-sm">Buah Super</span>
+      </label>
+    </div>
+    <style>
+      .bp-pill { display:flex;align-items:center;gap:2px;font-size:12px;padding:4px 12px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;background:#fff;color:#475569; }
+      .bp-pill.active { border-color:#4318FF;background:#eef2ff;color:#4318FF;font-weight:600; }
+      .bp-pill input { display:none; }
+      .bp-pill input:checked + label { border-color:#4318FF; }
+    </style>
+    <script>
+      document.querySelectorAll('.bp-pill').forEach(p => p.addEventListener('click', function() {
+        this.closest('.bp-pills').querySelectorAll('.bp-pill').forEach(x => x.classList.remove('active'));
+        this.classList.add('active');
+        this.querySelector('input').checked = true;
+      }));
+    </script>
+  </section>
+  <button class="btn-primary">Simpan Kendaraan</button>
+</form>
+<%- include('../partials/footer') %>

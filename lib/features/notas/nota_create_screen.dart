@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/enums.dart';
 import '../../models/bon_model.dart';
 import '../../models/nota_model.dart';
+import '../../models/relation_agent_model.dart';
 import '../../providers/providers.dart';
 
 // Formatter agar input selalu huruf besar
@@ -33,12 +34,14 @@ class NotaCreateScreen extends ConsumerStatefulWidget {
 
 class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
   List<BonModel> _availableBons = [];
+  List<RelationAgentModel> _relationAgents = [];
   final Set<String> _selectedBonIds = {};
   final Set<String> _initialBonIds = {};
   bool _isLoading = true;
 
   final _recipientNameController = TextEditingController();
   final _recipientAddressController = TextEditingController();
+  String? _selectedRelationAgentId;
   final _formKey = GlobalKey<FormState>();
 
   @override
@@ -49,7 +52,12 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
 
   Future<void> _loadData() async {
     try {
-      final bons = await ref.read(bonRepositoryProvider).getBons();
+      final results = await Future.wait([
+        ref.read(bonRepositoryProvider).getBons(),
+        ref.read(relationAgentRepositoryProvider).getRelationAgents(),
+      ]);
+      final bons = results[0] as List<BonModel>;
+      final relations = results[1] as List<RelationAgentModel>;
 
       if (widget.notaToEdit != null) {
         // If editing, we also need to know which bons are currently assigned to this invoice
@@ -71,6 +79,10 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
               widget.notaToEdit!.recipientName ?? '';
           _recipientAddressController.text =
               widget.notaToEdit!.recipientAddress ?? '';
+          _relationAgents = relations;
+          _selectedRelationAgentId =
+              widget.notaToEdit!.relationAgentId ??
+              _matchRelationId(widget.notaToEdit!.recipientName, relations);
 
           _isLoading = false;
         });
@@ -80,6 +92,7 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
           _availableBons = bons
               .where((b) => b.status == PaymentStatus.belumDibayar)
               .toList();
+          _relationAgents = relations;
           _isLoading = false;
         });
       }
@@ -103,6 +116,22 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
     return sum;
   }
 
+  String? _matchRelationId(String? name, List<RelationAgentModel> relations) {
+    final normalized = (name ?? '').trim().toUpperCase();
+    if (normalized.isEmpty) return null;
+    for (final relation in relations) {
+      if (relation.name.toUpperCase() == normalized) return relation.id;
+    }
+    return null;
+  }
+
+  RelationAgentModel? get _selectedRelation {
+    for (final relation in _relationAgents) {
+      if (relation.id == _selectedRelationAgentId) return relation;
+    }
+    return null;
+  }
+
   Future<void> _saveNota() async {
     if (_selectedBonIds.isEmpty) {
       ScaffoldMessenger.of(
@@ -112,6 +141,13 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
     }
 
     if (!_formKey.currentState!.validate()) return;
+    final relation = _selectedRelation;
+    if (relation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih Relasi / Agen penerima.')),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -128,8 +164,9 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
           status: widget.notaToEdit!.status,
           createdAt: widget.notaToEdit!.createdAt,
           updatedAt: DateTime.now(),
-          recipientName: _recipientNameController.text.trim(),
-          recipientAddress: _recipientAddressController.text.trim(),
+          relationAgentId: relation.id,
+          recipientName: relation.name,
+          recipientAddress: relation.address,
         );
 
         await ref
@@ -149,8 +186,9 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
           status: PaymentStatus.tertagih,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          recipientName: _recipientNameController.text.trim(),
-          recipientAddress: _recipientAddressController.text.trim(),
+          relationAgentId: relation.id,
+          recipientName: relation.name,
+          recipientAddress: relation.address,
         );
 
         await ref
@@ -208,29 +246,44 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
                       padding: const EdgeInsets.all(20),
                       children: [
                         _buildSectionCard(
-                          title: 'Data Penerima',
+                          title: 'Data Relasi/Agen',
                           icon: Icons.person_outline,
                           children: [
-                            TextFormField(
-                              controller: _recipientNameController,
-                              inputFormatters: [UpperCaseTextFormatter()],
+                            DropdownButtonFormField<String>(
+                              value: _selectedRelationAgentId,
+                              isExpanded: true,
                               decoration: _inputDecoration(
-                                label: 'Kepada (Nama)',
-                                hint: 'Contoh: PT. SAWIT JAYA / BPK. RUDI',
+                                label: 'Relasi / Agen',
+                              ),
+                              items: _relationAgents
+                                  .map(
+                                    (relation) => DropdownMenuItem(
+                                      value: relation.id,
+                                      child: Text(
+                                        relation.name,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) => setState(
+                                () => _selectedRelationAgentId = value,
                               ),
                               validator: (v) => v == null || v.isEmpty
-                                  ? 'Nama wajib diisi'
+                                  ? 'Relasi wajib dipilih'
                                   : null,
                             ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _recipientAddressController,
-                              inputFormatters: [UpperCaseTextFormatter()],
-                              decoration: _inputDecoration(
-                                label: 'Alamat (Opsional)',
-                                hint: 'Contoh: MEDAN, SUMATERA UTARA',
+                            if (_selectedRelation != null) ...[
+                              const SizedBox(height: 12),
+                              Text(_selectedRelation!.address ?? '-'),
+                              const SizedBox(height: 8),
+                              ..._selectedRelation!.accounts.map(
+                                (account) => Text(
+                                  '${account.accountName} - ${account.accountNumber}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -284,7 +337,7 @@ class _NotaCreateScreenState extends ConsumerState<NotaCreateScreen> {
                                       ),
                                     ),
                                     subtitle: Text(
-                                      '${DateFormat('dd/MM/yy').format(bon.bonDate)} - ${NumberFormat.decimalPattern().format(bon.netto2)} Kg',
+                                      '${DateFormat('dd/MM/yy').format(bon.bonDate)} - ${NumberFormat.decimalPattern().format(bon.netto2)} Kg\n${bon.factoryName ?? '-'} - ${bon.relationName ?? '-'}',
                                       style: const TextStyle(fontSize: 12),
                                     ),
                                     secondary: Text(

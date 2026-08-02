@@ -1,34 +1,87 @@
 <%- include('../partials/header') %>
 <div class="page-head">
   <div>
-    <p class="eyebrow">Operasional</p>
+    <p class="eyebrow">Operasional <span id="realtime-status" style="font-size:10px;vertical-align:middle;margin-left:4px" title="Realtime">○</span></p>
     <h1>Nota Transaksi</h1>
   </div>
-  <a href="/notas/new" class="btn-primary">Buat Nota</a>
+  <a href="<%= url('/notas/new') %>" class="btn-primary">Buat Nota</a>
 </div>
 <form class="filter-bar">
   <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
   <input type="date" name="end" value="<%= filters.end || '' %>" class="form-input compact">
   <input name="q" value="<%= filters.q || '' %>" class="form-input compact" placeholder="Cari driver">
+  <select name="factory_id" class="form-input compact">
+    <option value="">Semua Pabrik</option>
+    <% (factories || []).forEach((f) => { %>
+      <option value="<%= f.id %>" <%= filters.factory_id === f.id ? 'selected' : '' %>><%= f.name %></option>
+    <% }) %>
+  </select>
   <button class="btn-secondary">Filter</button>
 </form>
+<% const notaStatuses = summary.byStatus.BELUM_DIBAYAR ? ['BELUM_DIBAYAR', 'TERTAGIH', 'LUNAS'] : ['TERTAGIH', 'LUNAS']; %>
+<section class="metric-grid mb-5">
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-icon teal"><i data-lucide="files"></i></span>
+      <span class="stat-label">Total Nota</span>
+    </div>
+    <strong><%= format.number(summary.all.count) %></strong>
+    <small><%= format.currency(summary.all.amount) %></small>
+  </div>
+  <% notaStatuses.forEach((status) => {
+    const item = summary.byStatus[status] || { count: 0, amount: 0 };
+    const isPaid = status === 'LUNAS';
+    const isLegacy = status === 'BELUM_DIBAYAR';
+  %>
+    <div class="metric-card">
+      <div class="metric-head">
+        <span class="metric-icon <%= isPaid ? 'blue' : 'amber' %>"><i data-lucide="<%= isPaid ? 'badge-check' : (isLegacy ? 'circle-alert' : 'file-clock') %>"></i></span>
+        <span class="stat-label"><%= format.notaStatusLabel(status) %></span>
+      </div>
+      <strong><%= format.number(item.count) %></strong>
+      <small><%= format.currency(item.amount) %></small>
+    </div>
+  <% }) %>
+</section>
 <div class="table-card">
   <table>
-    <thead><tr><th>Tanggal</th><th>Nomor</th><th>Penerima</th><th>Item</th><th>Total</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Tanggal</th><th>Nomor</th><th>Relasi/Agen</th><th>Item</th><th>Total</th><th>Status</th><th></th></tr></thead>
     <tbody>
       <% if (!notas.length) { %><tr><td colspan="7" class="empty">Belum ada nota.</td></tr><% } %>
       <% notas.forEach((nota) => { %>
         <tr>
           <td><%= format.date(nota.invoice_date) %></td>
-          <td class="font-bold"><%= nota.invoice_number %></td>
-          <td><%= nota.recipient_name || '-' %></td>
-          <td><%= nota.nota_items?.[0]?.count || 0 %></td>
+          <td><a href="<%= url(`/notas/${nota.id}`) %>" class="font-bold no-underline text-inherit hover:text-indigo-600"><%= nota.invoice_number %></a></td>
+          <td><%= nota.relation_agents?.name || nota.recipient_name || '-' %></td>
+          <td>
+            <% const items = nota.nota_items || []; %>
+            <% const plates = items.map((item) => item.bons?.plate_number || '-'); %>
+            <details class="bon-summary">
+              <summary>
+                <strong><%= items.length %></strong> bon<% if (items.length) { %> · <%= plates.slice(0, 2).join(', ') %><% if (items.length > 2) { %> +<%= items.length - 2 %><% } %><% } %>
+              </summary>
+              <div class="bon-summary-list">
+                <% items.forEach((item) => { %>
+                  <div><strong><%= item.bons?.plate_number || '-' %></strong> — <%= item.bons?.driver_name || '-' %> <span class="float-right"><%= format.currency(item.bons?.total || 0) %></span></div>
+                <% }) %>
+              </div>
+            </details>
+          </td>
           <td class="font-bold"><%= format.currency(nota.total_amount) %></td>
-          <td><span class="status <%= nota.status.toLowerCase() %>"><%= format.statusLabel(nota.status) %></span></td>
-          <td class="text-right"><a class="link" href="/notas/<%= nota.id %>">Detail</a></td>
+          <td>
+            <span class="status <%= nota.status.toLowerCase() %>" title="<%= format.notaStatusDescription(nota.status) %>"><%= format.notaStatusLabel(nota.status) %></span>
+          </td>
+          <td class="text-right"><a class="link" href="<%= url(`/notas/${nota.id}`) %>">Detail</a></td>
         </tr>
       <% }) %>
     </tbody>
   </table>
 </div>
+<script src="<%= url('/js/realtime.js') %>"></script>
+<style>
+.bon-summary summary { cursor:pointer; font-size:.76rem; }
+.bon-summary-list { background:var(--surface-soft); border:1px solid var(--line); border-radius:6px; display:grid; gap:3px; margin-top:6px; min-width:200px; padding:6px 8px; }
+.bon-summary-list div { font-size:.72rem; line-height:1.4; }
+.bon-summary-list .float-right { color:var(--muted); }
+</style>
 <%- include('../partials/footer') %>

@@ -7,6 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "vitest run --globals",
+    "cleanup:nota-status": "node scripts/normalize-nota-status.js",
+    "cleanup:settle-notas": "node scripts/settle-all-notas.js",
     "test:watch": "vitest --globals"
   },
   "keywords": [

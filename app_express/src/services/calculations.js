@@ -4,6 +4,12 @@ const PAYMENT_STATUS = {
   LUNAS: 'LUNAS'
 };
 
+const FACTORY_ZERO_PPH_UANGMINUM = 'a536e3c0-7ea0-4003-9df0-c38721a9439b';
+
+function isZeroPphUangMinum(factoryId) {
+  return factoryId === FACTORY_ZERO_PPH_UANGMINUM;
+}
+
 function toNumber(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;
   const normalized = typeof value === 'string' ? value.replace(/[^\d.-]/g, '') : value;
@@ -41,18 +47,26 @@ function calculateBon(input) {
   const price = toInt(input.price);
   const dp = toInt(input.dp);
   const biayaBongkar = toInt(input.biaya_bongkar);
+  const rawSpsiMode = String(input.spsi_calculation_mode || '').trim().toUpperCase();
+  const spsiCalculationMode = rawSpsiMode === 'FIX' ? 'FIX' : 'PER_KG';
+  const spsiRate = input.spsi_rate === undefined || input.spsi_rate === ''
+    ? biayaBongkar
+    : toInt(input.spsi_rate);
   const bpColt = toInt(input.bp_colt);
-  const pph = input.pph === undefined || input.pph === ''
+
+  const factoryId = input.factory_id || null;
+  const zeroPphUm = isZeroPphUangMinum(factoryId);
+  const pph = zeroPphUm ? 0 : (input.pph === undefined || input.pph === ''
     ? Math.floor(0.0025 * price * netto2)
-    : toInt(input.pph);
-  const uangMinum = input.uang_minum === undefined || input.uang_minum === ''
-    ? (netto2 > 8000 ? 20000 : 10000)
-    : toInt(input.uang_minum);
+    : toInt(input.pph));
+  const uangMinum = zeroPphUm ? 0 : (input.uang_minum === undefined || input.uang_minum === ''
+    ? (netto2 > 7000 ? 20000 : 10000)
+    : toInt(input.uang_minum));
   const deductions = input.deductions || [];
-  const potLain = deductions.reduce((sum, item) => sum + toInt(item.amount), 0);
+  const potonganLain = deductions.reduce((sum, item) => sum + toInt(item.amount), 0);
   const subtotal = price * netto2;
-  const totalBiayaBongkar = biayaBongkar * netto1;
-  const total = subtotal - (dp + totalBiayaBongkar + bpColt + pph + uangMinum + potLain);
+  const totalBiayaBongkar = spsiCalculationMode === 'FIX' ? spsiRate : spsiRate * netto1;
+  const total = subtotal - (dp + totalBiayaBongkar + bpColt + pph + uangMinum + potonganLain);
 
   return {
     netto_1: netto1,
@@ -60,10 +74,12 @@ function calculateBon(input) {
     price,
     dp,
     biaya_bongkar: biayaBongkar,
+    spsi_calculation_mode: spsiCalculationMode,
+    spsi_rate: spsiRate,
+    spsi_amount: totalBiayaBongkar,
     bp_colt: bpColt,
     pph,
     uang_minum: uangMinum,
-    pot_lain: potLain,
     subtotal,
     total_biaya_bongkar: totalBiayaBongkar,
     total

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/enums.dart';
 import '../../models/nota_model.dart';
 import '../../models/payment_model.dart';
+import '../../models/factory_model.dart';
 import '../../providers/providers.dart';
 import '../../core/widgets/zoomable_image_preview.dart';
 import 'payment_entry_screen.dart';
@@ -32,11 +33,19 @@ class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
   );
   final TextEditingController _searchController = TextEditingController();
   String _driverQuery = '';
+  List<FactoryModel> _factories = [];
+  String? _selectedFactoryId;
 
   @override
   void initState() {
     super.initState();
     _refreshPayments();
+    _loadFactories();
+  }
+
+  Future<void> _loadFactories() async {
+    final factories = await ref.read(factoryRepositoryProvider).getFactories();
+    if (mounted) setState(() => _factories = factories);
   }
 
   @override
@@ -53,6 +62,7 @@ class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
             startDate: _selectedDateRange?.start,
             endDate: _selectedDateRange?.end,
             driverQuery: _driverQuery,
+            factoryId: _selectedFactoryId,
           );
     });
   }
@@ -213,6 +223,10 @@ class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
                   },
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: _buildFactoryFilter(),
+              ),
               Expanded(
                 child: RefreshIndicator(
                   color: const Color(0xFF4318FF),
@@ -292,6 +306,40 @@ class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
+    );
+  }
+
+  Widget _buildFactoryFilter() {
+    return DropdownButtonFormField<String>(
+      value: _selectedFactoryId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Filter Pabrik',
+        prefixIcon: Icon(Icons.factory_outlined, color: Colors.indigo.shade300),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      items: [
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('Semua Pabrik'),
+        ),
+        ..._factories.map(
+          (f) => DropdownMenuItem<String>(
+            value: f.id,
+            child: Text(f.name, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: (value) {
+        setState(() => _selectedFactoryId = value);
+        _refreshPayments();
+      },
     );
   }
 

@@ -1,0 +1,41 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Relasi / Agen</p>
+    <h1><%= relationAgent.name %></h1>
+  </div>
+  <div class="flex gap-2">
+    <a href="<%= url(`/relation-agents/${relationAgent.id}/edit`) %>" class="btn-secondary">Edit</a>
+    <a href="<%= url('/relation-agents') %>" class="btn-secondary">Kembali</a>
+  </div>
+</div>
+
+<section class="form-card">
+  <h2>Informasi Relasi / Agen</h2>
+  <dl class="detail-list">
+    <dt>Nama</dt><dd><%= relationAgent.name %></dd>
+    <dt>Alamat</dt><dd><%= relationAgent.address || '-' %></dd>
+    <dt>Kontak</dt><dd><%= relationAgent.contact || '-' %></dd>
+  </dl>
+</section>
+
+<div class="grid gap-5 lg:grid-cols-2">
+  <section class="form-card">
+    <h2>Rekening</h2>
+    <% const accounts = relationAgent.relation_agent_accounts || []; %>
+    <% if (!accounts.length) { %><p class="empty">Belum ada rekening.</p><% } %>
+    <div class="space-y-3">
+      <% accounts.forEach((account) => { %>
+        <div class="select-row">
+          <span><strong><%= account.account_name || '-' %></strong><small><%= account.account_number || '-' %></small></span>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+</div>
+
+<form method="post" action="<%= url(`/relation-agents/${relationAgent.id}?_method=DELETE`) %>" data-confirm="Hapus relasi / agen ini?" class="mt-5">
+  <button class="link danger">Hapus Relasi / Agen</button>
+</form>
+<%- include('../partials/footer') %>

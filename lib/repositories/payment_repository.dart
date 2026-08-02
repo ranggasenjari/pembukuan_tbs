@@ -21,11 +21,10 @@ class PaymentRepository {
     DateTime? startDate,
     DateTime? endDate,
     String? driverQuery,
+    String? factoryId,
   }) async {
-    // Basic select
     var selectQuery = '*, notas(id, invoice_number, total_amount)';
 
-    // Deep filter for driver name
     if (driverQuery != null && driverQuery.isNotEmpty) {
       selectQuery =
           '*, notas!inner(id, invoice_number, total_amount, nota_items!inner(bons!inner(driver_name)))';
@@ -40,20 +39,48 @@ class PaymentRepository {
       );
     }
     if (endDate != null) {
-      final nextDay = endDate.add(const Duration(days: 1));
+      final nextDay = DateTime.utc(endDate.year, endDate.month, endDate.day + 1);
       query = query.lt('payment_date', nextDay.toIso8601String().split('T')[0]);
     }
     if (driverQuery != null && driverQuery.isNotEmpty) {
-      // Filter the deep nested relation
       query = query.ilike(
         'notas.nota_items.bons.driver_name',
         '%$driverQuery%',
       );
     }
 
-    final response = await query.order('payment_date', ascending: false);
+    var response = await query.order('payment_date', ascending: false);
 
-    return List<Map<String, dynamic>>.from(response);
+    var results = List<Map<String, dynamic>>.from(response);
+
+    // Apply factory filter client-side if needed
+    if (factoryId != null && factoryId.isNotEmpty) {
+      final filteredIds = <String>{};
+      for (final payment in results) {
+        final nota = payment['notas'];
+        if (nota is Map) {
+          final notaId = nota['id'] as String?;
+          if (notaId != null && await _paymentHasFactoryBon(notaId, factoryId)) {
+            filteredIds.add(payment['id'] as String);
+          }
+        }
+      }
+      results = results
+          .where((p) => filteredIds.contains(p['id'] as String))
+          .toList();
+    }
+
+    return results;
+  }
+
+  Future<bool> _paymentHasFactoryBon(String notaId, String factoryId) async {
+    final items = await _client
+        .from('nota_items')
+        .select('bons!inner(factory_id)')
+        .eq('invoice_id', notaId)
+        .eq('bons.factory_id', factoryId)
+        .limit(1);
+    return (items as List).isNotEmpty;
   }
 
   Future<PaymentModel> createPayment(
@@ -100,7 +127,7 @@ class PaymentRepository {
       await _client
           .from('bons')
           .update({'status': 'LUNAS'})
-          .filter('id', 'in', bonIds);
+          .inFilter('id', bonIds);
     }
 
     return PaymentModel.fromJson(response);
@@ -111,7 +138,11 @@ class PaymentRepository {
   Future<List<Map<String, dynamic>>> getUnassignedPayments({
     String? includeMarginId,
   }) async {
-    var query = _client.from('payments').select('*, notas(invoice_number)');
+    var query = _client
+        .from('payments')
+        .select(
+          '*, notas(invoice_number, recipient_name, nota_items(bons(netto_2, price)))',
+        );
 
     if (includeMarginId != null) {
       query = query.or('margin_id.is.null,margin_id.eq.$includeMarginId');
@@ -156,12 +187,27 @@ class PaymentRepository {
     // 2. Delete Payment
     await _client.from('payments').delete().eq('id', id);
 
-    // 3. Revert Nota Status to BELUM_DIBAYAR
+    // 3. Revert Nota and related Bons to waiting payment state
     if (notaId != null) {
       await _client
           .from('notas')
-          .update({'status': 'BELUM_DIBAYAR'})
+          .update({'status': 'TERTAGIH'})
           .eq('id', notaId);
+
+      final notaItemsResponse = await _client
+          .from('nota_items')
+          .select('bon_id')
+          .eq('invoice_id', notaId);
+      final bonIds = (notaItemsResponse as List)
+          .map((e) => e['bon_id'] as String)
+          .toList();
+
+      if (bonIds.isNotEmpty) {
+        await _client
+            .from('bons')
+            .update({'status': 'TERTAGIH'})
+            .inFilter('id', bonIds);
+      }
     }
   }
 

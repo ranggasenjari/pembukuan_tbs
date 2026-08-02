@@ -5,10 +5,20 @@ function serializeBon(body, calculated, imageUrl) {
   const data = {
     ticket_number: body.ticket_number || null,
     bon_date: body.bon_date,
-    plate_number: String(body.plate_number || '').trim().toUpperCase(),
+    plate_number: String(body.plate_number || '').replace(/\s+/g, '').toUpperCase(),
     driver_name: body.driver_name ? String(body.driver_name).trim().toUpperCase() : null,
-    relation_name: body.relation_name ? String(body.relation_name).trim().toUpperCase() : null,
+    relation_name: body.relation_agent_id ? null : (body.relation_name ? String(body.relation_name).trim().toUpperCase() : null),
+    relation_agent_id: body.relation_agent_id || null,
+    factory_id: body.factory_id || null,
+    factory_spsi_type_id: body.factory_spsi_type_id || null,
+    spsi_type_name: body.spsi_type_name ? String(body.spsi_type_name).trim().toUpperCase() : null,
+    spsi_calculation_mode: calculated.spsi_calculation_mode,
+    spsi_rate: calculated.spsi_rate,
+    spsi_amount: calculated.spsi_amount,
     fruit_origin: body.fruit_origin ? String(body.fruit_origin).trim().toUpperCase() : null,
+    chat_id: body.chat_id || null,
+    message_id: body.message_id || null,
+    notes: body.notes || null,
     netto_1: calculated.netto_1,
     netto_2: calculated.netto_2,
     price: calculated.price,
@@ -17,7 +27,6 @@ function serializeBon(body, calculated, imageUrl) {
     bp_colt: calculated.bp_colt,
     pph: calculated.pph,
     uang_minum: calculated.uang_minum,
-    pot_lain: calculated.pot_lain,
     total: calculated.total,
     status: body.status || PAYMENT_STATUS.BELUM_DIBAYAR
   };
@@ -27,19 +36,20 @@ function serializeBon(body, calculated, imageUrl) {
 }
 
 async function listBons(supabase, filters = {}) {
-  let query = supabase.from('bons').select('*, bon_deductions(*)');
+  let query = supabase.from('bons').select('*, bon_deductions(*), factories(name), relation_agents(name)');
   query = applyDateRange(query, 'bon_date', filters.start, filters.end);
   if (filters.status) query = query.eq('status', filters.status);
   if (filters.q) {
     const q = String(filters.q).trim();
     query = query.or(`driver_name.ilike.%${q}%,plate_number.ilike.%${q}%,relation_name.ilike.%${q}%`);
   }
+  if (filters.factory_id) query = query.eq('factory_id', filters.factory_id);
   return assertNoError(await query.order('created_at', { ascending: false }));
 }
 
 async function getBon(supabase, id) {
   return assertNoError(
-    await supabase.from('bons').select('*, bon_deductions(*)').eq('id', id).single()
+    await supabase.from('bons').select('*, bon_deductions(*), factories(name), relation_agents(name)').eq('id', id).single()
   );
 }
 
@@ -74,10 +84,12 @@ async function createBon(supabase, data, deductions = []) {
   return getBon(supabase, created.id);
 }
 
-async function updateBon(supabase, id, data, deductions = []) {
-  const current = assertNoError(await supabase.from('bons').select('status').eq('id', id).single());
-  if (current.status !== PAYMENT_STATUS.BELUM_DIBAYAR) {
-    throw new Error('Bon sudah diproses (Tertagih/Lunas), tidak dapat diedit.');
+async function updateBon(supabase, id, data, deductions = [], skipStatusCheck = false) {
+  if (!skipStatusCheck) {
+    const current = assertNoError(await supabase.from('bons').select('status').eq('id', id).single());
+    if (current.status === PAYMENT_STATUS.LUNAS) {
+      throw new Error('Bon sudah lunas, tidak dapat diedit.');
+    }
   }
 
   assertNoError(await supabase.from('bons').update(data).eq('id', id));
@@ -93,9 +105,17 @@ async function updateBon(supabase, id, data, deductions = []) {
 }
 
 async function deleteBon(supabase, id) {
-  const current = assertNoError(await supabase.from('bons').select('status').eq('id', id).single());
+  const current = assertNoError(await supabase.from('bons').select('status, image_url').eq('id', id).single());
   if (current.status !== PAYMENT_STATUS.BELUM_DIBAYAR) {
     throw new Error('Bon sudah diproses (Tertagih/Lunas), tidak dapat dihapus.');
+  }
+  // Hapus file dari bucket jika ada
+  if (current.image_url) {
+    const pathMatch = current.image_url.match(/\/object\/public\/[^/]+\/(.+)$/);
+    if (pathMatch) {
+      const filePath = pathMatch[1];
+      await supabase.storage.from('receipts').remove([filePath]).catch(() => {});
+    }
   }
   assertNoError(await supabase.from('bons').delete().eq('id', id));
 }

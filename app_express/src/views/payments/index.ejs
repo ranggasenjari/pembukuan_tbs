@@ -5,11 +5,17 @@
     <h1>Pembayaran</h1>
     <p class="text-sm text-slate-500">Saldo tersedia: <strong><%= format.currency(balance) %></strong></p>
   </div>
-  <a href="/payments/new" class="btn-primary">Tambah Pembayaran</a>
+  <a href="<%= url('/payments/new') %>" class="btn-primary">Tambah Pembayaran</a>
 </div>
 <form class="filter-bar">
   <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
   <input type="date" name="end" value="<%= filters.end || '' %>" class="form-input compact">
+  <select name="factory_id" class="form-input compact">
+    <option value="">Semua Pabrik</option>
+    <% (factories || []).forEach((f) => { %>
+      <option value="<%= f.id %>" <%= filters.factory_id === f.id ? 'selected' : '' %>><%= f.name %></option>
+    <% }) %>
+  </select>
   <button class="btn-secondary">Filter</button>
 </form>
 <div class="table-card">
@@ -26,8 +32,8 @@
           <td><% if (payment.proof_url) { %><a class="link" target="_blank" href="<%= payment.proof_url %>">Lihat</a><% } %></td>
           <td class="text-right">
             <% if (!payment.margin_id) { %>
-              <a href="/payments/<%= payment.id %>/edit" class="link">Edit</a>
-              <form method="post" action="/payments/<%= payment.id %>?_method=DELETE" data-confirm="Hapus pembayaran ini?" class="inline">
+              <a href="<%= url(`/payments/${payment.id}/edit`) %>" class="link">Edit</a>
+              <form method="post" action="<%= url(`/payments/${payment.id}?_method=DELETE`) %>" data-confirm="Hapus pembayaran ini?" class="inline">
                 <button class="link danger">Hapus</button>
               </form>
             <% } %>

@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/nota_model.dart';
 import '../models/bon_model.dart';
+import '../core/enums.dart';
 
 final dateFmt = DateFormat('dd/MM/yyyy');
 final timeFmt = DateFormat('HH:mm');
@@ -20,7 +21,7 @@ class PdfService {
         build: (pw.Context context) {
           final totalBiayaBongkar = bons.fold(
             0.0,
-            (sum, bon) => sum + (bon.biayaBongkar * bon.netto1),
+            (sum, bon) => sum + bon.spsiAmount,
           );
           final totalBpColt = bons.fold(0.0, (sum, bon) => sum + bon.bpColt);
           final totalPph = bons.fold(0.0, (sum, bon) => sum + bon.pph);
@@ -73,11 +74,24 @@ class PdfService {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('To:'),
+                      pw.Text('Relasi/Agen:'),
                       pw.Text(nota.recipientName ?? '-'),
                       if (nota.recipientAddress != null &&
                           nota.recipientAddress!.isNotEmpty)
                         pw.Text(nota.recipientAddress!),
+                      if (nota.accounts.isNotEmpty)
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.SizedBox(height: 4),
+                            pw.Text('Rek. Bayar:',
+                                style: pw.TextStyle(fontSize: 9)),
+                            ...nota.accounts.map(
+                              (acc) => pw.Text(acc,
+                                  style: pw.TextStyle(fontSize: 9)),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                   pw.Column(
@@ -144,7 +158,7 @@ class PdfService {
                       },
                       children: [
                         _buildPotonganRow(
-                          'Biaya Bongkar',
+                          'SPSI / Bongkar',
                           totalBiayaBongkar,
                           currencyFormatter,
                         ),
@@ -235,6 +249,24 @@ class PdfService {
                   ),
                 ],
               ),
+              pw.SizedBox(height: 6),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    nota.status == PaymentStatus.lunas
+                        ? 'STATUS: LUNAS'
+                        : 'STATUS: MENUNGGU BAYAR',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      color: nota.status == PaymentStatus.lunas
+                          ? PdfColors.green
+                          : PdfColors.orange,
+                    ),
+                  ),
+                ],
+              ),
             ],
           );
         },
@@ -299,7 +331,7 @@ class PdfService {
 
     return '*NOTA TIMBANGAN*\n'
         'No: ${nota.notaNumber}\n'
-        'Kepada: ${nota.recipientName ?? "-"}\n'
+        'Relasi/Agen: ${nota.recipientName ?? "-"}\n'
         '${_getDayName(DateTime.now())}, ${DateFormat('dd MMMM yyyy').format(DateTime.now())}\n'
         '--------------------------\n'
         'Netto: $totalNetto2 Kg\n'
@@ -328,7 +360,7 @@ class PdfService {
     );
 
     final subtotal = bon.netto2 * bon.price;
-    final spsiResult = bon.netto1 * bon.biayaBongkar;
+    final spsiResult = bon.spsiAmount;
 
     final pphPercent = (bon.pph / subtotal * 100);
     final pphDisplay = pphPercent > 0 ? pphPercent.toStringAsFixed(2) : "0.25";
@@ -367,13 +399,16 @@ class PdfService {
               pw.SizedBox(height: 5),
               pw.Table(
                 columnWidths: {
-                  0: const pw.FixedColumnWidth(40),
-                  1: const pw.FixedColumnWidth(80),
+                  0: const pw.FixedColumnWidth(50),
+                  1: const pw.FixedColumnWidth(70),
                 },
                 children: [
                   pw.TableRow(
                     children: [
-                      pw.Text('Kepada', style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text(
+                        'Relasi/Agen',
+                        style: const pw.TextStyle(fontSize: 8),
+                      ),
                       pw.Text(
                         ': ${nota.recipientName ?? '-'}',
                         style: pw.TextStyle(
@@ -395,6 +430,17 @@ class PdfService {
                       ),
                     ],
                   ),
+                  if (nota.accounts.isNotEmpty)
+                    pw.TableRow(
+                      children: [
+                        pw.Text('Rek. Bayar',
+                            style: const pw.TextStyle(fontSize: 8)),
+                        pw.Text(
+                          ': ${nota.accounts.join(", ")}',
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
+                      ],
+                    ),
                 ],
               ),
               pw.SizedBox(height: 8),
@@ -463,7 +509,9 @@ class PdfService {
                     pw.TableRow(
                       children: [
                         pw.Text(
-                          'SPSI (${bon.netto1.toInt()} Kg x Rp ${currencyFormatter.format(bon.biayaBongkar)})',
+                          bon.spsiTypeName != null
+                              ? 'SPSI ${bon.spsiTypeName}'
+                              : 'SPSI (${bon.netto1.toInt()} Kg x Rp ${currencyFormatter.format(bon.biayaBongkar)})',
                           style: const pw.TextStyle(fontSize: 7),
                         ),
                         pw.Text(
@@ -545,6 +593,24 @@ class PdfService {
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
                       fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    nota.status == PaymentStatus.lunas
+                        ? 'STATUS: LUNAS'
+                        : 'STATUS: MENUNGGU BAYAR',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                      color: nota.status == PaymentStatus.lunas
+                          ? PdfColors.green
+                          : PdfColors.orange,
                     ),
                   ),
                 ],

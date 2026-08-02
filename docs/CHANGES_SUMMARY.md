@@ -114,8 +114,8 @@ app_express/.env
 | [SECURITY.md](SECURITY.md) | Comprehensive security documentation (IMPORTANT!) |
 | [SECURITY_CHANGES.md](SECURITY_CHANGES.md) | Summary of all security changes |
 | [DEVELOPMENT_SETUP.md](DEVELOPMENT_SETUP.md) | Development setup guide for team |
-| [run-dev.sh](run-dev.sh) | Linux/macOS launcher script for Flutter |
-| [run-dev.bat](run-dev.bat) | Windows launcher script for Flutter |
+| [scripts/dev/run-dev.sh](../scripts/dev/run-dev.sh) | Linux/macOS launcher script for Flutter |
+| [scripts/dev/run-dev.bat](../scripts/dev/run-dev.bat) | Windows launcher script for Flutter |
 
 ### 📝 Files Modified
 
@@ -143,9 +143,9 @@ app_express/.env
 # 1. Get credentials from tech lead (securely!)
 
 # 2. Flutter Setup
-./run-dev.sh  # macOS/Linux
+scripts/dev/run-dev.sh  # macOS/Linux
 # OR
-run-dev.bat   # Windows
+scripts/dev/run-dev.bat   # Windows
 # Edit file first and fill SUPABASE credentials
 
 # 3. Express Setup
@@ -200,7 +200,7 @@ Project Root/
 │
 ├── app_express/README.md       # Express setup with security section
 │
-└── run-dev.sh / run-dev.bat   # Convenient launchers
+└── scripts/dev/run-dev.sh / scripts/dev/run-dev.bat   # Convenient launchers
 ```
 
 **ACTION:** Read [SECURITY.md](SECURITY.md) first! It's the most important document.
@@ -267,8 +267,8 @@ Actions needed:
 ### 🟠 THIS WEEK
 
 5. Test setup with team members:
-   - Run `./run-dev.sh` (macOS/Linux)
-   - Run `run-dev.bat` (Windows)
+   - Run `scripts/dev/run-dev.sh` (macOS/Linux)
+   - Run `scripts/dev/run-dev.bat` (Windows)
    - Verify Express with `.env` setup
 6. Update team documentation/wiki
 7. Setup git hooks to prevent accidents (optional)

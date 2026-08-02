@@ -2,6 +2,8 @@ class MarginModel {
   final String id;
   final DateTime createdAt;
   final DateTime transactionDate;
+  final String? factoryId;
+  final String? factoryName;
   final int offtakerAmount;
   final int realAmount;
   final int marginAmount;
@@ -10,6 +12,8 @@ class MarginModel {
     required this.id,
     required this.createdAt,
     required this.transactionDate,
+    this.factoryId,
+    this.factoryName,
     required this.offtakerAmount,
     required this.realAmount,
     required this.marginAmount,
@@ -20,6 +24,8 @@ class MarginModel {
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']),
       transactionDate: DateTime.parse(json['transaction_date']),
+      factoryId: json['factory_id'],
+      factoryName: json['factories']?['name'],
       offtakerAmount: (json['offtaker_amount'] as num?)?.toInt() ?? 0,
       realAmount: (json['real_amount'] as num?)?.toInt() ?? 0,
       marginAmount: (json['margin_amount'] as num?)?.toInt() ?? 0,
@@ -29,6 +35,7 @@ class MarginModel {
   Map<String, dynamic> toJson() {
     return {
       'transaction_date': transactionDate.toIso8601String(),
+      'factory_id': factoryId,
       'offtaker_amount': offtakerAmount,
       'real_amount': realAmount,
       'margin_amount': marginAmount,

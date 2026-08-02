@@ -1,6 +1,7 @@
 const express = require('express');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const marginRepository = require('../repositories/marginRepository');
+const factoryRepository = require('../repositories/factoryRepository');
 const { arrayField, todayInput } = require('../services/request');
 
 const router = express.Router();
@@ -12,11 +13,15 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.get('/new', asyncHandler(async (req, res) => {
-  const payments = await marginRepository.getMarginFormPayments(req.supabase);
+  const [payments, factories] = await Promise.all([
+    marginRepository.getMarginFormPayments(req.supabase),
+    factoryRepository.listFactories(req.supabase)
+  ]);
   res.render('margins/form', {
     title: 'Input Margin',
     margin: null,
     payments,
+    factories,
     selectedIds: [],
     today: todayInput()
   });
@@ -29,15 +34,17 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.get('/:id/edit', asyncHandler(async (req, res) => {
-  const [margin, payments, selected] = await Promise.all([
+  const [margin, payments, selected, factories] = await Promise.all([
     marginRepository.getMargin(req.supabase, req.params.id),
     marginRepository.getMarginFormPayments(req.supabase, req.params.id),
-    marginRepository.getMarginPayments(req.supabase, req.params.id)
+    marginRepository.getMarginPayments(req.supabase, req.params.id),
+    factoryRepository.listFactories(req.supabase)
   ]);
   res.render('margins/form', {
     title: 'Edit Margin',
     margin,
     payments,
+    factories,
     selectedIds: selected.map((payment) => payment.id),
     today: todayInput()
   });

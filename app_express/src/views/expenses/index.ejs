@@ -4,7 +4,7 @@
     <p class="eyebrow">Keuangan</p>
     <h1>Pengeluaran</h1>
   </div>
-  <a href="/expenses/new" class="btn-primary">Tambah Pengeluaran</a>
+  <a href="<%= url('/expenses/new') %>" class="btn-primary">Tambah Pengeluaran</a>
 </div>
 <form class="filter-bar">
   <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
@@ -23,7 +23,7 @@
           <td><%= expense.category %></td>
           <td class="font-bold"><%= format.currency(expense.amount) %></td>
           <td class="text-right">
-            <form method="post" action="/expenses/<%= expense.id %>?_method=DELETE" data-confirm="Hapus pengeluaran ini?" class="inline"><button class="link danger">Hapus</button></form>
+            <form method="post" action="<%= url(`/expenses/${expense.id}?_method=DELETE`) %>" data-confirm="Hapus pengeluaran ini?" class="inline"><button class="link danger">Hapus</button></form>
           </td>
         </tr>
       <% }) %>

@@ -1,0 +1,62 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Operasional</p>
+    <h1>Transaksi Relasi</h1>
+  </div>
+</div>
+<form class="filter-bar">
+  <input type="date" name="start" value="<%= filters.start %>" class="form-input compact">
+  <input type="date" name="end" value="<%= filters.end %>" class="form-input compact">
+  <button class="btn-secondary">Filter</button>
+</form>
+
+<% if (!data.length) { %>
+  <section class="form-card"><p class="empty">Belum ada data transaksi untuk periode ini.</p></section>
+<% } else { %>
+<div class="table-card flush">
+<table>
+<thead><tr><th>#</th><th>Nama Relasi</th><th>Bon</th><th>Nota</th><th>Bayar</th></tr></thead>
+<tbody>
+<% data.forEach((rel, relIdx) => { %>
+  <% rel.notas.forEach((notaGroup, nIdx) => { %>
+    <% notaGroup.bons.forEach((bon, bIdx) => { %>
+      <tr>
+        <% if (bIdx === 0 && nIdx === 0) { %>
+          <td rowspan="<%= rel.total_bons %>" class="text-center align-top text-xs text-slate-400"><%= relIdx + 1 %></td>
+          <td rowspan="<%= rel.total_bons %>" class="align-top whitespace-nowrap">
+            <div class="font-bold"><%= rel.relation.name %></div>
+            <% if (rel.relation.contact) { %><div class="text-xs text-slate-500">HP: <%= rel.relation.contact %></div><% } %>
+            <% const accounts = rel.relation.payment_relation_accounts || []; %>
+            <% if (accounts.length) { %>
+              <div class="text-xs text-slate-500 mt-1">Rek:</div>
+              <% accounts.forEach(a => { %>
+                <div class="text-xs"><%= a.bank_name %> - <%= a.account_number %> - <%= a.account_name %></div>
+              <% }); %>
+            <% } %>
+          </td>
+        <% } %>
+        <td class="text-sm whitespace-nowrap"><%= bon.plate_number %> - <%= bon.driver_name || '' %><br><span class="text-xs text-slate-500"><%= format.number(bon.netto_2) %> kg | <%= format.currency(bon.total) %></span></td>
+        <% if (bIdx === 0) { %>
+          <td rowspan="<%= notaGroup.bons.length %>" class="text-sm whitespace-nowrap align-top font-semibold"><%= notaGroup.nota?.invoice_number || '-' %><br><span class="font-normal text-xs text-slate-500"><%= notaGroup.total_bons %> bon | <%= format.currency(notaGroup.total_rp) %></span></td>
+        <% } %>
+        <% if (bIdx === 0 && nIdx === 0) { %>
+          <td rowspan="<%= rel.total_bons %>" class="align-top whitespace-nowrap">
+            <% const groupedPayments = {}; %>
+            <% rel.notas.forEach(ng => { (ng.payments || []).forEach(p => { const key = p.id; if (!groupedPayments[key]) groupedPayments[key] = { payment: p, notas: [] }; groupedPayments[key].notas.push(ng); }); }); %>
+            <% Object.values(groupedPayments).forEach((gp, pi) => { %>
+              <div class="text-xs"><%= format.date(gp.payment.payment_date) %> • <%= gp.notas.length %> nota<br><span class="font-semibold"><%= format.currency(gp.payment.amount_paid) %></span></div>
+              <% if (pi < Object.values(groupedPayments).length - 1) { %><div class="border-t my-1 border-slate-200"></div><% } %>
+            <% }) %>
+            <% if (!Object.keys(groupedPayments).length) { %><span class="text-xs text-slate-400">—</span><% } %>
+          </td>
+        <% } %>
+      </tr>
+    <% }); %>
+  <% }); %>
+<% }); %>
+</tbody>
+</table>
+</div>
+<% } %>
+<%- include('../partials/footer') %>

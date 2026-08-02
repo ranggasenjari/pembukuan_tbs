@@ -108,9 +108,22 @@ class _PaymentEntryScreenState extends ConsumerState<PaymentEntryScreen> {
       }
 
       if (amount > currentAvailable) {
-        throw Exception(
-          'Saldo tidak mencukupi. Tersedia: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(currentAvailable)}',
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Saldo Tidak Mencukupi'),
+            content: Text(
+              'Saldo tersedia: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(currentAvailable)}\n'
+              'Jumlah bayar: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(amount)}\n\n'
+              'Tetap simpan pembayaran?',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Ya, Simpan')),
+            ],
+          ),
         );
+        if (proceed != true) return;
       }
 
       if (widget.paymentToEdit != null) {

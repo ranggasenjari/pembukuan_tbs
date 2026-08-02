@@ -2,6 +2,8 @@
 
 Base URL lokal: `http://localhost:3000/api/v1`
 
+Jika app dipublish melalui reverse proxy subpath, misalnya `/bon/`, set `BASE_PATH=/bon` dan gunakan base URL `https://domain/bon/api/v1`.
+
 Semua endpoint wajib mengirim header:
 
 ```http
@@ -107,7 +109,7 @@ Jika kode bon tidak ditemukan, API mengembalikan `404`. Jika kode bon duplikat, 
 }
 ```
 
-### Buat nota dan langsung cetak PDF A4
+### Buat nota dan langsung cetak PDF
 
 `POST /notas/pdf/from-bons`
 
@@ -123,11 +125,12 @@ curl -X POST http://localhost:3000/api/v1/notas/pdf/from-bons \
   }'
 ```
 
-Endpoint ini membuat nota dari bon berstatus `BELUM_DIBAYAR`, mengubah status bon menjadi `TERTAGIH`, lalu mengembalikan PDF A4. Header respons berisi `X-Nota-Id` dan `X-Invoice-Number`.
+Endpoint ini membuat nota dari bon berstatus `BELUM_DIBAYAR`, mengubah status bon menjadi `TERTAGIH`, lalu mengembalikan PDF. Jika nota berisi 1 bon, format otomatis thermal. Jika nota berisi lebih dari 1 bon, format otomatis A4. Header respons berisi `X-Nota-Id`, `X-Invoice-Number`, dan `X-Pdf-Format`.
 
 Endpoint lain:
 
 - `GET /notas`
+- `GET /notas/search/by-recipient?recipient_name=PT%20MAKMUR`
 - `GET /notas/:id`
 - `PATCH /notas/:id`
 - `DELETE /notas/:id`

@@ -457,6 +457,14 @@ class _MarginListScreenState extends ConsumerState<MarginListScreen> {
                   padding: EdgeInsets.symmetric(vertical: 12),
                   child: Divider(height: 1),
                 ),
+                Text(
+                  'Pabrik: ${margin.factoryName ?? '-'}',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(

@@ -1,0 +1,749 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Pembukuan TBS API",
+    "version": "1.0.0",
+    "description": "REST API untuk aplikasi Pembukuan TBS (manajemen slip timbangan kelapa sawit).\n\nAutentikasi via header `x-api-key`."
+  },
+  "servers": [
+    { "url": "/api/v1", "description": "API v1" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      },
+      "Bon": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "ticket_number": { "type": "string" },
+          "bon_date": { "type": "string", "format": "date" },
+          "plate_number": { "type": "string" },
+          "driver_name": { "type": "string" },
+          "relation_name": { "type": "string" },
+          "relation_agent_id": { "type": "string" },
+          "factory_id": { "type": "string" },
+          "factory_spsi_type_id": { "type": "string" },
+          "spsi_type_name": { "type": "string" },
+          "spsi_calculation_mode": { "type": "string", "enum": ["PER_KG", "FIX"] },
+          "spsi_rate": { "type": "number" },
+          "spsi_amount": { "type": "number" },
+          "fruit_origin": { "type": "string" },
+          "netto_1": { "type": "number" },
+          "netto_2": { "type": "number" },
+          "price": { "type": "number" },
+          "dp": { "type": "number" },
+          "biaya_bongkar": { "type": "number" },
+          "bp_colt": { "type": "number" },
+          "pph": { "type": "number" },
+          "uang_minum": { "type": "number" },
+          "notes": { "type": "string", "description": "Catatan" },
+          "total": { "type": "number" },
+          "image_url": { "type": "string" },
+          "status": { "type": "string", "enum": ["BELUM_DIBAYAR", "TERTAGIH", "LUNAS"] },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "bon_deductions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "bon_id": { "type": "string" },
+                "label": { "type": "string" },
+                "amount": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "Nota": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "invoice_number": { "type": "string" },
+          "invoice_date": { "type": "string", "format": "date" },
+          "total_amount": { "type": "number" },
+          "status": { "type": "string", "enum": ["BELUM_DIBAYAR", "TERTAGIH", "LUNAS"] },
+          "relation_agent_id": { "type": "string" },
+          "recipient_name": { "type": "string" },
+          "recipient_address": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "invoice_id": { "type": "string" },
+          "payment_date": { "type": "string", "format": "date" },
+          "amount_paid": { "type": "number" },
+          "proof_url": { "type": "string" },
+          "margin_id": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Deposit": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string" },
+          "amount": { "type": "number" },
+          "category": { "type": "string", "enum": ["piutang", "kredit"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Margin": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "transaction_date": { "type": "string", "format": "date" },
+          "factory_id": { "type": "string" },
+          "offtaker_amount": { "type": "number" },
+          "real_amount": { "type": "number" },
+          "margin_amount": { "type": "number" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Expense": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "expense_date": { "type": "string", "format": "date" },
+          "recipient_name": { "type": "string" },
+          "category": { "type": "string", "enum": ["MITRA", "OPERASIONAL", "DEPOSIT", "LAINNYA"] },
+          "amount": { "type": "number" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "security": [{ "ApiKeyAuth": [] }],
+  "paths": {
+    "/bons": {
+      "get": {
+        "summary": "Daftar bon",
+        "tags": ["Bon"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" }, "description": "Tanggal awal (YYYY-MM-DD)" },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" }, "description": "Tanggal akhir (YYYY-MM-DD)" },
+          { "in": "query", "name": "q", "schema": { "type": "string" }, "description": "Cari driver, plat, atau relasi" },
+          { "in": "query", "name": "status", "schema": { "type": "string", "enum": ["BELUM_DIBAYAR", "TERTAGIH", "LUNAS"] }, "description": "Filter status" }
+        ],
+        "responses": { "200": { "description": "Daftar bon", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Bon" } } } } } }
+      },
+      "post": {
+        "summary": "Buat bon baru",
+        "tags": ["Bon"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": { "type": "string", "format": "binary", "description": "Foto bon" },
+                  "ticket_number": { "type": "string" },
+                  "bon_date": { "type": "string", "format": "date" },
+                  "plate_number": { "type": "string" },
+                  "driver_name": { "type": "string" },
+                  "relation_name": { "type": "string" },
+                  "relation_agent_id": { "type": "string" },
+                  "factory_id": { "type": "string" },
+                  "factory_spsi_type_id": { "type": "string" },
+                  "netto_1": { "type": "number" },
+                  "netto_2": { "type": "number" },
+                  "price": { "type": "number" },
+                  "dp": { "type": "number" },
+                  "biaya_bongkar": { "type": "number" },
+                  "bp_colt": { "type": "number" },
+                  "uang_minum": { "type": "number" },
+                  "chat_id": { "type": "string", "description": "ID chat asal (dari Telegram/WA)" },
+                  "message_id": { "type": "string", "description": "ID message asal (dari Telegram/WA)" },
+                  "notes": { "type": "string", "description": "Catatan" },
+                  "deduction_label": { "type": "array", "items": { "type": "string" }, "description": "Label potongan dinamis" },
+                  "deduction_amount": { "type": "array", "items": { "type": "number" }, "description": "Jumlah potongan dinamis" }
+                },
+                "required": ["bon_date", "plate_number", "relation_agent_id"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Bon created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Bon" } } } }
+        }
+      }
+    },
+    "/bons/from-ocr": {
+      "post": {
+        "summary": "Buat bon dari data OCR eksternal (mapping nama otomatis)",
+        "tags": ["Bon"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "factory_name": { "type": "string", "description": "Nama pabrik (dicocokkan otomatis)" },
+                    "ticket_number": { "type": "string" },
+                    "bon_date": { "type": "string", "format": "date", "description": "Tanggal bon (YYYY-MM-DD)" },
+                    "plate_number": { "type": "string", "description": "Nomor plat kendaraan" },
+                    "relation_name": { "type": "string", "description": "Nama relasi/agen (dicocokkan otomatis)" },
+                    "driver_name": { "type": "string" },
+                    "fruit_origin": { "type": "string", "description": "Asal buah" },
+                    "chat_id": { "type": "string", "description": "ID chat asal (Telegram/WA)" },
+                    "message_id": { "type": "string", "description": "ID message asal" },
+                    "catatan": { "type": "string", "description": "Catatan/keterangan" },
+                    "relation_agent_id": { "type": "string", "description": "ID relasi langsung (jika ada)" },
+                    "factory_spsi_type_id": { "type": "string", "description": "ID jenis SPSI langsung" },
+                    "spsi_type_name": { "type": "string", "description": "Nama jenis SPSI" },
+                    "spsi_calculation_mode": { "type": "string", "enum": ["PER_KG", "FIX"], "description": "Mode hitung SPSI" },
+                    "spsi_rate": { "type": "number", "description": "Nilai SPSI" },
+                    "netto_1": { "type": "number" },
+                    "netto_2": { "type": "number" }
+                  },
+                  "required": ["bon_date", "plate_number"]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Bon created" }
+        }
+      }
+    },
+    "/bons/ocr": {
+      "post": {
+        "summary": "OCR gambar bon",
+        "tags": ["Bon"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "File gambar bon" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Data hasil OCR" }
+        }
+      }
+    },
+    "/bons/{id}": {
+      "get": {
+        "summary": "Detail bon + relasi",
+        "tags": ["Bon"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Detail bon", "content": { "application/json": { "schema": { "type": "object", "properties": { "bon": { "$ref": "#/components/schemas/Bon" }, "related": { "type": "object" } } } } } }
+        }
+      },
+      "patch": {
+        "summary": "Update bon",
+        "tags": ["Bon"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": { "type": "string", "format": "binary" },
+                  "plate_number": { "type": "string" },
+                  "driver_name": { "type": "string" },
+                  "netto_1": { "type": "number" },
+                  "netto_2": { "type": "number" },
+                  "price": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Bon updated" } }
+      },
+      "delete": {
+        "summary": "Hapus bon",
+        "tags": ["Bon"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Bon deleted", "content": { "application/json": { "schema": { "type": "object", "properties": { "deleted": { "type": "boolean" } } } } } } }
+      }
+    },
+    "/notas": {
+      "get": {
+        "summary": "Daftar nota",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "q", "schema": { "type": "string" }, "description": "Cari driver" }
+        ],
+        "responses": {
+          "200": { "description": "Daftar nota", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Nota" } } } } }
+        }
+      },
+      "post": {
+        "summary": "Buat nota baru",
+        "tags": ["Nota"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "relation_agent_id": { "type": "string" },
+                  "recipient_name": { "type": "string" },
+                  "bon_codes": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Nomor tiket bon (array atau CSV)"
+                  }
+                },
+                "required": ["bon_codes"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Nota created" } }
+      }
+    },
+    "/notas/search/by-recipient": {
+      "get": {
+        "summary": "Cari nota berdasarkan penerima",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "query", "name": "recipient_name", "schema": { "type": "string" }, "required": true },
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "status", "schema": { "type": "string", "enum": ["BELUM_DIBAYAR", "TERTAGIH", "LUNAS"] } }
+        ],
+        "responses": { "200": { "description": "Daftar nota" } }
+      }
+    },
+    "/notas/pdf/from-bons": {
+      "post": {
+        "summary": "Buat nota dan generate PDF dari kode bon",
+        "tags": ["Nota"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bon_codes": { "type": "array", "items": { "type": "string" } },
+                  "relation_agent_id": { "type": "string" },
+                  "recipient_name": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "PDF file" } }
+      }
+    },
+    "/notas/{id}": {
+      "get": {
+        "summary": "Detail nota + bons + payments",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Detail nota" } }
+      },
+      "patch": {
+        "summary": "Update nota",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Nota updated" } }
+      },
+      "delete": {
+        "summary": "Hapus nota",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Nota deleted" } }
+      }
+    },
+    "/notas/{id}/pdf": {
+      "get": {
+        "summary": "PDF A4 nota",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "PDF file", "content": { "application/pdf": {} } } }
+      }
+    },
+    "/notas/{id}/pdf/thermal": {
+      "get": {
+        "summary": "PDF thermal (struk) nota",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "PDF thermal file", "content": { "application/pdf": {} } } }
+      }
+    },
+    "/notas/send/{id}/{whatsapp_id}": {
+      "get": {
+        "summary": "Kirim nota via WhatsApp ke nomor tertentu",
+        "tags": ["Nota"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" }, "description": "ID nota" },
+          { "in": "path", "name": "whatsapp_id", "required": true, "schema": { "type": "string" }, "description": "Nomor/ID WhatsApp tujuan (contoh: 120363402074969776@g.us atau 62812xxxxx@c.us)" }
+        ],
+        "responses": {
+          "200": { "description": "WA terkirim", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "message": { "type": "string" }, "chatId": { "type": "string" } } } } } },
+          "404": { "description": "Nota tidak ditemukan" },
+          "500": { "description": "Gagal kirim WA" }
+        }
+      }
+    },
+    "/payments": {
+      "get": {
+        "summary": "Daftar pembayaran",
+        "tags": ["Payment"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": { "description": "Daftar pembayaran + saldo" }
+        }
+      },
+      "post": {
+        "summary": "Buat pembayaran baru",
+        "tags": ["Payment"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "invoice_id": { "type": "string", "description": "ID nota" },
+                  "payment_date": { "type": "string", "format": "date" },
+                  "amount_paid": { "type": "number" },
+                  "proof": { "type": "string", "format": "binary", "description": "Foto bukti bayar" }
+                },
+                "required": ["invoice_id", "payment_date", "amount_paid"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Payment created" } }
+      }
+    },
+    "/payments/payable-notas": {
+      "get": {
+        "summary": "Daftar nota yang bisa dibayar (status TERTAGIH)",
+        "tags": ["Payment"],
+        "responses": { "200": { "description": "Daftar nota" } }
+      }
+    },
+    "/payments/{id}": {
+      "get": {
+        "summary": "Detail pembayaran",
+        "tags": ["Payment"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Detail payment" } }
+      },
+      "patch": {
+        "summary": "Update pembayaran",
+        "tags": ["Payment"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Payment updated" } }
+      },
+      "delete": {
+        "summary": "Hapus pembayaran",
+        "tags": ["Payment"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Payment deleted" } }
+      }
+    },
+    "/deposits": {
+      "get": {
+        "summary": "Daftar deposit/saldo",
+        "tags": ["Deposit"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "category", "schema": { "type": "string", "enum": ["piutang", "kredit"] } }
+        ],
+        "responses": { "200": { "description": "Daftar deposit + saldo" } }
+      },
+      "post": {
+        "summary": "Tambah deposit",
+        "tags": ["Deposit"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": { "type": "string" },
+                  "amount": { "type": "number" },
+                  "category": { "type": "string", "enum": ["piutang", "kredit"] }
+                },
+                "required": ["source", "amount"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Deposit created" } }
+      }
+    },
+    "/deposits/{id}": {
+      "get": {
+        "summary": "Detail deposit",
+        "tags": ["Deposit"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Detail deposit" } }
+      },
+      "patch": {
+        "summary": "Update deposit",
+        "tags": ["Deposit"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deposit updated" } }
+      },
+      "delete": {
+        "summary": "Hapus deposit",
+        "tags": ["Deposit"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deposit deleted" } }
+      }
+    },
+    "/margins": {
+      "get": {
+        "summary": "Daftar margin/offtaker",
+        "tags": ["Margin"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": { "200": { "description": "Daftar margin" } }
+      },
+      "post": {
+        "summary": "Buat margin baru",
+        "tags": ["Margin"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "transaction_date": { "type": "string", "format": "date" },
+                  "factory_id": { "type": "string" },
+                  "offtaker_amount": { "type": "number" },
+                  "payment_ids": { "type": "array", "items": { "type": "string" }, "description": "ID payments yang termasuk" }
+                },
+                "required": ["transaction_date", "offtaker_amount", "payment_ids"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Margin created" } }
+      }
+    },
+    "/margins/form-payments": {
+      "get": {
+        "summary": "Daftar payment untuk form margin (belum ter-assign)",
+        "tags": ["Margin"],
+        "parameters": [
+          { "in": "query", "name": "include_margin_id", "schema": { "type": "string" }, "description": "Sertakan payment dari margin tertentu (untuk edit)" }
+        ],
+        "responses": { "200": { "description": "Daftar payments" } }
+      }
+    },
+    "/margins/{id}": {
+      "get": {
+        "summary": "Detail margin + payments",
+        "tags": ["Margin"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Detail margin" } }
+      },
+      "patch": {
+        "summary": "Update margin",
+        "tags": ["Margin"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Margin updated" } }
+      },
+      "delete": {
+        "summary": "Hapus margin",
+        "tags": ["Margin"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Margin deleted" } }
+      }
+    },
+    "/expenses": {
+      "get": {
+        "summary": "Daftar pengeluaran",
+        "tags": ["Expense"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": { "200": { "description": "Daftar pengeluaran" } }
+      },
+      "post": {
+        "summary": "Buat pengeluaran baru",
+        "tags": ["Expense"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expense_date": { "type": "string", "format": "date" },
+                  "recipient_name": { "type": "string" },
+                  "category": { "type": "string", "enum": ["MITRA", "OPERASIONAL", "DEPOSIT", "LAINNYA"] },
+                  "amount": { "type": "number" },
+                  "margin_ids": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["expense_date", "recipient_name", "category", "amount"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Expense created" } }
+      }
+    },
+    "/expenses/{id}": {
+      "get": {
+        "summary": "Detail pengeluaran + margins",
+        "tags": ["Expense"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Detail expense" } }
+      },
+      "patch": {
+        "summary": "Update pengeluaran",
+        "tags": ["Expense"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Expense updated" } }
+      },
+      "delete": {
+        "summary": "Hapus pengeluaran",
+        "tags": ["Expense"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Expense deleted" } }
+      }
+    },
+    "/reports/ledger": {
+      "get": {
+        "summary": "Laporan buku besar",
+        "tags": ["Report"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": { "200": { "description": "Data laporan buku besar" } }
+      }
+    },
+    "/reports/summary": {
+      "get": {
+        "summary": "Ringkasan laporan",
+        "tags": ["Report"],
+        "parameters": [
+          { "in": "query", "name": "since", "schema": { "type": "string", "format": "date" }, "description": "Tanggal mulai (default: awal bulan)" }
+        ],
+        "responses": { "200": { "description": "Data ringkasan" } }
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "summary": "Ringkasan dashboard",
+        "tags": ["Dashboard"],
+        "parameters": [
+          { "in": "query", "name": "start", "schema": { "type": "string", "format": "date" } },
+          { "in": "query", "name": "end", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Statistik dashboard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalBons": { "type": "number" },
+                    "ongoingBons": { "type": "number" },
+                    "finishedBons": { "type": "number" },
+                    "unpaidNotas": { "type": "number" },
+                    "paidNotas": { "type": "number" },
+                    "totalTransactions": { "type": "number" },
+                    "totalMyTransactions": { "type": "number" },
+                    "totalMargin": { "type": "number" },
+                    "totalExpenses": { "type": "number" },
+                    "netProfit": { "type": "number" },
+                    "currentBalance": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

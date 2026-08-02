@@ -6,7 +6,11 @@ import '../../bons/bon_list_screen.dart';
 import '../../margins/margin_list_screen.dart';
 import '../../payments/payment_list_screen.dart';
 import '../../expenses/expense_list_screen.dart';
+import '../../relation_agents/relation_agent_list_screen.dart';
+import '../../payment_relations/payment_relation_list_screen.dart';
+import '../../factories/factory_list_screen.dart';
 import '../../saldo/saldo_list_screen.dart';
+import '../../settings/settings_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -37,6 +41,26 @@ class AppDrawer extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 _buildSectionTitle('OPERASIONAL'),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.groups_outlined,
+                  title: 'Relasi / Agen',
+                  onTap: () =>
+                      _navigateTo(context, const RelationAgentListScreen()),
+                ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.handshake_outlined,
+                  title: 'Relasi Bayar',
+                  onTap: () =>
+                      _navigateTo(context, const PaymentRelationListScreen()),
+                ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.factory_outlined,
+                  title: 'Pabrik',
+                  onTap: () => _navigateTo(context, const FactoryListScreen()),
+                ),
                 _buildDrawerItem(
                   context,
                   icon: Icons.receipt_long_outlined,
@@ -74,6 +98,14 @@ class AppDrawer extends StatelessWidget {
                   icon: Icons.outbox_outlined,
                   title: 'Pengeluaran',
                   onTap: () => _navigateTo(context, const ExpenseListScreen()),
+                ),
+                const SizedBox(height: 8),
+                _buildSectionTitle('SISTEM'),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.settings_outlined,
+                  title: 'Setting',
+                  onTap: () => _navigateTo(context, const SettingsScreen()),
                 ),
               ],
             ),

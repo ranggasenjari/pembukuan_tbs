@@ -10,9 +10,16 @@
   <% const groups = [
     ['Utama', [
       ['/dashboard', 'Dashboard', 'layout-dashboard'],
-      ['/reports/ledger', 'Buku Besar', 'book-open-check']
+      ['/bon-management', 'Manajemen Bon', 'columns-3'],
+      ['/transactions', 'Transaksi Relasi', 'arrow-left-right'],
+      ['/reports/ledger', 'Buku Besar', 'book-open-check'],
+      ['/reports/harian', 'Cetakan', 'printer']
     ]],
     ['Operasional', [
+      ['/relation-agents', 'Relasi / Agen', 'users-round'],
+      ['/payment-relations', 'Relasi Bayar', 'hand-coins'],
+      ['/vehicles', 'Kendaraan', 'truck'],
+      ['/factories', 'Pabrik', 'factory'],
       ['/bons', 'Slip Timbangan', 'receipt-text'],
       ['/notas', 'Nota Transaksi', 'file-text']
     ]],
@@ -21,6 +28,9 @@
       ['/payments', 'Pembayaran', 'credit-card'],
       ['/margins', 'Margin / Offtaker', 'trending-up'],
       ['/expenses', 'Pengeluaran', 'send']
+    ]],
+    ['Sistem', [
+      ['/settings', 'Setting', 'settings']
     ]]
   ]; %>
 
@@ -29,7 +39,7 @@
       <div class="nav-group">
         <div class="nav-group-title"><%= groupName %></div>
         <% groupItems.forEach(([href, label, icon]) => { const active = path === href || path.startsWith(`${href}/`); %>
-          <a href="<%= href %>" class="nav-item <%= active ? 'active' : '' %>">
+          <a href="<%= url(href) %>" class="nav-item <%= active ? 'active' : '' %>">
             <i data-lucide="<%= icon %>"></i>
             <span><%= label %></span>
           </a>
@@ -46,7 +56,7 @@
         <div class="user-email"><%= currentUser.email %></div>
       </div>
     </div>
-    <form method="post" action="/logout">
+    <form method="post" action="<%= url('/logout') %>">
       <button class="logout-button"><i data-lucide="log-out"></i><span>Keluar Aplikasi</span></button>
     </form>
   </div>
@@ -54,19 +64,22 @@
 
 <header class="mobile-header">
   <div class="mobile-header-row">
-    <a href="/dashboard" class="mobile-brand">
+    <a href="<%= url('/dashboard') %>" class="mobile-brand">
       <span class="brand-mark small">PT</span>
       <span>Pembukuan TBS</span>
     </a>
-    <form method="post" action="/logout">
+    <form method="post" action="<%= url('/logout') %>">
       <button class="mobile-logout" aria-label="Keluar"><i data-lucide="log-out"></i></button>
     </form>
   </div>
   <nav class="mobile-tabs">
-    <a href="/dashboard" class="chip">Dashboard</a>
-    <a href="/bons" class="chip">Bon</a>
-    <a href="/notas" class="chip">Nota</a>
-    <a href="/payments" class="chip">Bayar</a>
-    <a href="/reports/ledger" class="chip">Ledger</a>
+    <a href="<%= url('/dashboard') %>" class="chip">Dashboard</a>
+    <a href="<%= url('/bon-management') %>" class="chip">Manajemen</a>
+    <a href="<%= url('/relation-agents') %>" class="chip">Relasi</a>
+    <a href="<%= url('/bons') %>" class="chip">Bon</a>
+    <a href="<%= url('/notas') %>" class="chip">Nota</a>
+    <a href="<%= url('/payments') %>" class="chip">Bayar</a>
+    <a href="<%= url('/reports/ledger') %>" class="chip">Ledger</a>
+    <a href="<%= url('/reports/harian') %>" class="chip">Cetakan</a>
   </nav>
 </header>

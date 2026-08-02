@@ -14,6 +14,21 @@ async function getCurrentBalance(supabase) {
 async function listPayments(supabase, filters = {}) {
   let query = supabase.from('payments').select('*, notas(id, invoice_number, total_amount)');
   query = applyDateRange(query, 'payment_date', filters.start, filters.end);
+
+  if (filters.factory_id) {
+    const bons = assertNoError(
+      await supabase.from('bons').select('id').eq('factory_id', filters.factory_id)
+    );
+    const bonIds = bons.map((bon) => bon.id);
+    if (bonIds.length === 0) return [];
+    const items = assertNoError(
+      await supabase.from('nota_items').select('invoice_id').in('bon_id', bonIds)
+    );
+    const notaIds = [...new Set(items.map((item) => item.invoice_id))];
+    if (notaIds.length === 0) return [];
+    query = query.in('invoice_id', notaIds);
+  }
+
   return assertNoError(await query.order('payment_date', { ascending: false }));
 }
 
@@ -37,7 +52,7 @@ async function createPayment(supabase, body, proofUrl) {
   if (!proofUrl) throw new Error('Bukti pembayaran wajib diupload.');
   const amount = toInt(body.amount_paid);
   const balance = await getCurrentBalance(supabase);
-  if (amount > balance) throw new Error(`Saldo tidak mencukupi. Tersedia: ${balance}`);
+  if (amount > balance) console.warn('Saldo tidak mencukupi. Tersedia:', balance, 'Dibayar:', amount);
 
   const payment = assertNoError(
     await supabase
@@ -68,7 +83,7 @@ async function updatePayment(supabase, id, body) {
 
   const amount = body.amount_paid === undefined ? toInt(payment.amount_paid) : toInt(body.amount_paid);
   const balance = (await getCurrentBalance(supabase)) + toInt(payment.amount_paid);
-  if (amount > balance) throw new Error(`Saldo tidak mencukupi. Tersedia: ${balance}`);
+  if (amount > balance) console.warn('Saldo tidak mencukupi. Tersedia:', balance, 'Dibayar:', amount);
 
   const updates = { amount_paid: amount };
   if (body.payment_date !== undefined) updates.payment_date = body.payment_date || payment.payment_date;
@@ -99,7 +114,9 @@ async function deletePayment(supabase, id) {
 }
 
 async function getUnassignedPayments(supabase, includeMarginId = null) {
-  let query = supabase.from('payments').select('*, notas(invoice_number)');
+  let query = supabase
+    .from('payments')
+    .select('*, notas(invoice_number, recipient_name, nota_items(bons(netto_2, price)))');
   if (includeMarginId) query = query.or(`margin_id.is.null,margin_id.eq.${includeMarginId}`);
   else query = query.is('margin_id', null);
   return assertNoError(await query.order('payment_date', { ascending: false }));

@@ -1,7 +1,7 @@
 const statusEl = document.getElementById('conn-status');
 
 if (window.EventSource && statusEl) {
-  const source = new EventSource('/api/events');
+  const source = new EventSource(window.appUrl ? window.appUrl('/api/events') : '/api/events');
   source.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data);

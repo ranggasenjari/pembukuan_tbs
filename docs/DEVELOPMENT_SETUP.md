@@ -30,24 +30,24 @@ Gunakan password manager atau secure vault yang sudah di-setup team.
 
 **Windows:**
 ```bash
-# Edit run-dev.bat dan isi credentials lokal Anda
-# Buka run-dev.bat dengan text editor, cari EDIT SECTION
+# Edit scripts/dev/run-dev.bat dan isi credentials lokal Anda
+# Buka scripts/dev/run-dev.bat dengan text editor, cari EDIT SECTION
 
 # Kemudian run:
-run-dev.bat
+scripts/dev/run-dev.bat
 
 # atau untuk device specific:
-run-dev.bat -d <device-id>
+scripts/dev/run-dev.bat -d <device-id>
 ```
 
 **macOS/Linux:**
 ```bash
-# Edit run-dev.sh dan isi credentials lokal Anda
-chmod +x run-dev.sh
-./run-dev.sh
+# Edit scripts/dev/run-dev.sh dan isi credentials lokal Anda
+chmod +x scripts/dev/run-dev.sh
+scripts/dev/run-dev.sh
 
 # atau untuk device specific:
-./run-dev.sh -d <device-id>
+scripts/dev/run-dev.sh -d <device-id>
 ```
 
 ### Option B: Manual Run (Semua OS)
@@ -204,8 +204,8 @@ project-root/
 │   ├── key.properties          # ❌ DON'T COMMIT - Local credentials
 │   └── ...
 │
-├── run-dev.sh              # 🚀 Development launcher (Linux/macOS)
-├── run-dev.bat             # 🚀 Development launcher (Windows)
+├── scripts/dev/run-dev.sh              # 🚀 Development launcher (Linux/macOS)
+├── scripts/dev/run-dev.bat             # 🚀 Development launcher (Windows)
 ├── SECURITY.md             # 🔒 Security documentation
 └── ...
 ```
@@ -226,7 +226,7 @@ npm run dev
 # Leave running in background
 
 # 3. In new terminal, start Flutter
-# Use run-dev.sh/bat or flutter run --dart-define...
+# Use scripts/dev/run-dev.sh/bat or flutter run --dart-define...
 
 # 4. Start making changes!
 ```

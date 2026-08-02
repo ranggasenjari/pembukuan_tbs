@@ -1,0 +1,59 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Konfigurasi Sistem</p>
+    <h1>Setting</h1>
+  </div>
+</div>
+
+<form method="post" action="<%= url('/settings/ocr') %>" class="space-y-5">
+  <section class="form-card">
+    <h2>OCR Bon</h2>
+    <div class="grid gap-4 md:grid-cols-2">
+      <label>
+        <span class="form-label">Mode OCR</span>
+        <select name="mode" class="form-input">
+          <option value="webhook" <%= ocrSettings.mode === 'webhook' ? 'selected' : '' %>>OCR Webhook API</option>
+          <option value="internal" <%= ocrSettings.mode === 'internal' ? 'selected' : '' %>>Internal OCR</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <h2>OCR Webhook API</h2>
+    <div class="grid gap-4 md:grid-cols-2">
+      <label>
+        <span class="form-label">URL</span>
+        <input name="webhook_url" value="<%= ocrSettings.webhook_url || '' %>" class="form-input" placeholder="https://.../webhook/bon">
+      </label>
+      <label>
+        <span class="form-label">Key</span>
+        <input name="webhook_key" type="password" value="" class="form-input" placeholder="<%= ocrSettings.webhook_key ? 'Tersimpan, kosongkan jika tidak diganti' : 'Opsional' %>">
+      </label>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <h2>Internal OCR</h2>
+    <div class="grid gap-4">
+      <label>
+        <span class="form-label">Mistral API Key</span>
+        <input name="mistral_api_key" type="password" value="" class="form-input" placeholder="<%= ocrSettings.mistral_api_key ? 'Tersimpan, kosongkan jika tidak diganti' : 'Masukkan API key Mistral' %>">
+      </label>
+      <label>
+        <span class="form-label">Prompt</span>
+        <textarea name="mistral_prompt" rows="8" class="form-input"><%= ocrSettings.mistral_prompt || '' %></textarea>
+      </label>
+      <label>
+        <span class="form-label">Output JSON Schema</span>
+        <textarea name="mistral_output_schema" rows="18" class="form-input font-mono text-sm"><%= ocrSettings.mistral_output_schema || '' %></textarea>
+      </label>
+    </div>
+  </section>
+
+  <div class="flex flex-wrap gap-3">
+    <button class="btn-primary">Simpan Setting</button>
+  </div>
+</form>
+<%- include('../partials/footer') %>

@@ -1,5 +1,6 @@
 node_modules/
 .env
 coverage/
+scripts/
 .vitest/
 npm-debug.log*

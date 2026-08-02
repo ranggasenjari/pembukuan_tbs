@@ -22,4 +22,23 @@ async function uploadPublicFile(supabase, bucket, folder, file) {
   return data.publicUrl;
 }
 
-module.exports = { safeFileName, uploadPublicFile };
+async function uploadStorageFile(supabase, bucket, folder, file, options = {}) {
+  if (!file) return null;
+
+  const storagePath = `${folder}/${Date.now()}_${safeFileName(file.originalname)}`;
+  const { error } = await supabase.storage.from(bucket).upload(storagePath, file.buffer, {
+    contentType: file.mimetype,
+    upsert: Boolean(options.upsert)
+  });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+  return {
+    bucket,
+    path: storagePath,
+    publicUrl: data?.publicUrl || null
+  };
+}
+
+module.exports = { safeFileName, uploadPublicFile, uploadStorageFile };

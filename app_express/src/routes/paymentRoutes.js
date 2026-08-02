@@ -2,18 +2,20 @@ const express = require('express');
 const { upload } = require('../config/multer');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const paymentRepository = require('../repositories/paymentRepository');
+const factoryRepository = require('../repositories/factoryRepository');
 const { uploadPublicFile } = require('../services/uploadService');
 const { todayInput } = require('../services/request');
 
 const router = express.Router();
 
 router.get('/', asyncHandler(async (req, res) => {
-  const filters = { start: req.query.start, end: req.query.end };
-  const [payments, balance] = await Promise.all([
+  const filters = { start: req.query.start, end: req.query.end, factory_id: req.query.factory_id || null };
+  const [payments, balance, factories] = await Promise.all([
     paymentRepository.listPayments(req.supabase, filters),
-    paymentRepository.getCurrentBalance(req.supabase)
+    paymentRepository.getCurrentBalance(req.supabase),
+    factoryRepository.listFactories(req.supabase)
   ]);
-  res.render('payments/index', { title: 'Pembayaran', payments, filters, balance });
+  res.render('payments/index', { title: 'Pembayaran', payments, filters, balance, factories });
 }));
 
 router.get('/new', asyncHandler(async (req, res) => {
@@ -61,7 +63,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
 router.delete('/:id', asyncHandler(async (req, res) => {
   await paymentRepository.deletePayment(req.supabase, req.params.id);
-  req.flash('success', 'Pembayaran berhasil dihapus dan status nota/bon dikembalikan ke Tertagih.');
+  req.flash('success', 'Pembayaran berhasil dihapus dan status nota/bon dikembalikan ke Menunggu Pembayaran.');
   res.redirect('/payments');
 }));
 

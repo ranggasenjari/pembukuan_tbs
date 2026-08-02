@@ -5,22 +5,53 @@
     <p class="eyebrow">Slip Timbangan</p>
     <h1><%= bon ? 'Edit Bon' : 'Tambah Bon' %></h1>
   </div>
-  <a href="<%= bon ? `/bons/${bon.id}` : '/bons' %>" class="btn-secondary">Kembali</a>
+  <a href="<%= url(bon ? `/bons/${bon.id}` : '/bons') %>" class="btn-secondary">Kembali</a>
 </div>
 
 <% if (locked) { %>
   <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">Data bon ini terkunci karena sudah diproses.</div>
 <% } %>
 
-<form id="bon-form" method="post" enctype="multipart/form-data" action="<%= bon ? `/bons/${bon.id}?_method=PUT` : '/bons' %>" class="space-y-5">
+<form id="bon-form" method="post" enctype="multipart/form-data" action="<%= url(bon ? `/bons/${bon.id}?_method=PUT` : '/bons') %>" class="space-y-5">
   <section class="form-card">
     <h2>Data Timbangan</h2>
     <div class="grid gap-4 md:grid-cols-3">
       <label><span class="form-label">Nomor Tiket</span><input name="ticket_number" value="<%= b.ticket_number || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
       <label><span class="form-label">Tanggal Bon</span><input type="date" name="bon_date" value="<%= b.bon_date ? format.dateInput(b.bon_date) : today %>" required class="form-input" <%= locked ? 'readonly' : '' %>></label>
       <label><span class="form-label">Plat Nomor</span><input name="plate_number" value="<%= b.plate_number || '' %>" required class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
-      <label><span class="form-label">Nama Driver</span><input name="driver_name" value="<%= b.driver_name || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
-      <label><span class="form-label">Relasi</span><input name="relation_name" value="<%= b.relation_name || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+      <label><span class="form-label">Nama Supir</span><input name="driver_name" value="<%= b.driver_name || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+      <label>
+        <span class="form-label">Relasi</span>
+        <div class="flex gap-2">
+          <select required name="relation_agent_id" class="form-input flex-1" <%= locked ? 'disabled' : '' %>>
+            <option value="">Pilih Relasi / Agen</option>
+            <% (relationAgents || []).forEach((relation) => { %>
+              <option value="<%= relation.id %>" <%= b.relation_agent_id === relation.id || (!b.relation_agent_id && b.relation_name === relation.name) ? 'selected' : '' %>><%= relation.name %></option>
+            <% }) %>
+          </select>
+          <% if (!locked) { %><button type="button" id="add-relation-btn" class="btn-secondary small px-3" title="Tambah Relasi Baru">+</button><% } %>
+        </div>
+        <input type="hidden" name="relation_name" value="<%= b.relation_name || '' %>">
+      </label>
+      <label>
+        <span class="form-label">Pabrik</span>
+        <select name="factory_id" class="form-input" <%= locked ? 'disabled' : '' %>>
+          <option value="">Tanpa Pabrik</option>
+          <% (factories || []).forEach((factory) => { %>
+            <option value="<%= factory.id %>" <%= b.factory_id === factory.id ? 'selected' : '' %>><%= factory.name %></option>
+          <% }) %>
+        </select>
+        <input type="hidden" name="factory_name" value="<%= b.factories?.name || '' %>">
+      </label>
+      <label>
+        <span class="form-label">Jenis SPSI</span>
+        <select name="factory_spsi_type_id" class="form-input" <%= locked ? 'disabled' : '' %>>
+          <option value="">Pilih Jenis SPSI</option>
+        </select>
+        <input type="hidden" name="spsi_type_name" value="<%= b.spsi_type_name || '' %>">
+        <input type="hidden" name="spsi_calculation_mode" value="<%= b.spsi_calculation_mode || 'PER_KG' %>">
+        <input type="hidden" name="spsi_rate" value="<%= b.spsi_rate ?? b.biaya_bongkar ?? 12 %>">
+      </label>
       <label><span class="form-label">Asal Buah</span><input name="fruit_origin" value="<%= b.fruit_origin || '' %>" class="form-input uppercase" <%= locked ? 'readonly' : '' %>></label>
       <label><span class="form-label">Netto 1</span><input name="netto_1" value="<%= b.netto_1 || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
       <label><span class="form-label">Netto 2</span><input name="netto_2" value="<%= b.netto_2 || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
@@ -35,7 +66,7 @@
     </div>
     <div class="grid gap-4 md:grid-cols-5">
       <label><span class="form-label">DP / Panjar</span><input name="dp" value="<%= b.dp || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
-      <label><span class="form-label">Bongkar / Kg</span><input name="biaya_bongkar" value="<%= b.biaya_bongkar ?? 12 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
+      <label><span id="biaya-bongkar-label" class="form-label">Bongkar (Rp/Kg)</span><input name="biaya_bongkar" value="<%= b.spsi_rate ?? b.biaya_bongkar ?? 12 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
       <label><span class="form-label">BP / Colt</span><input name="bp_colt" value="<%= b.bp_colt ?? 100000 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
       <label><span class="form-label">PPh 0.25%</span><input name="pph" value="<%= b.pph || 0 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
       <label><span class="form-label">Uang Minum</span><input name="uang_minum" value="<%= b.uang_minum ?? 10000 %>" type="number" class="form-input bon-calc" <%= locked ? 'readonly' : '' %>></label>
@@ -51,9 +82,14 @@
     </div>
     <div class="mt-5 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-3">
       <div><span class="text-xs text-slate-500">Subtotal</span><strong id="subtotal-display" class="block text-lg">Rp 0</strong></div>
-      <div><span class="text-xs text-slate-500">Total Potongan</span><strong id="deduction-display" class="block text-lg">Rp 0</strong></div>
+      <div><span class="text-xs text-slate-500">Total Potongan</span><strong id="deduction-display" class="block text-lg">Rp 0</strong><small id="spsi-display" class="block text-xs text-slate-500"></small></div>
       <div><span class="text-xs text-slate-500">Total Dibayar</span><strong id="total-display" class="block text-xl text-emerald-700">Rp 0</strong></div>
     </div>
+  </section>
+
+  <section class="form-card">
+    <h2>Catatan</h2>
+    <textarea name="notes" rows="3" class="form-input" <%= locked ? 'readonly' : '' %> placeholder="Catatan tambahan..."><%= b.notes || '' %></textarea>
   </section>
 
   <section class="form-card">
@@ -70,10 +106,17 @@
 
   <% if (!bon) { %>
     <section class="form-card">
-      <h2>Simpan & Share Cepat</h2>
+      <h2>Simpan & Buat Nota Cepat</h2>
       <div class="grid gap-4 md:grid-cols-2">
-        <label><span class="form-label">Nama Penerima Nota</span><input name="quick_recipient_name" class="form-input uppercase"></label>
-        <label><span class="form-label">Alamat Penerima</span><input name="quick_recipient_address" class="form-input uppercase"></label>
+        <label>
+          <span class="form-label">Relasi/Agen Nota</span>
+          <select name="quick_relation_agent_id" class="form-input">
+            <option value="">Ikuti Relasi Bon</option>
+            <% (relationAgents || []).forEach((relation) => { %>
+              <option value="<%= relation.id %>"><%= relation.name %></option>
+            <% }) %>
+          </select>
+        </label>
       </div>
     </section>
   <% } %>
@@ -84,6 +127,75 @@
       <% if (!bon) { %><button name="intent" value="save_share" class="btn-secondary">Simpan & Buat Nota</button><% } %>
     </div>
   <% } %>
+<input type="hidden" name="ocr_image_url" value="">
 </form>
-<script src="/js/bon-form.js"></script>
+<% if (!locked) { %>
+<dialog id="add-relation-dialog" class="rounded-xl shadow-xl p-6 max-w-md">
+  <h3 class="text-lg font-bold mb-4">Tambah Relasi Baru</h3>
+  <div class="space-y-3">
+    <input id="new-relation-name" class="form-input uppercase" placeholder="Nama Relasi / Agen">
+    <input id="new-relation-contact" class="form-input" placeholder="Kontak (opsional)">
+  </div>
+  <div class="flex gap-2 mt-5 justify-end">
+    <button type="button" id="cancel-add-relation" class="btn-secondary">Batal</button>
+    <button type="button" id="confirm-add-relation" class="btn-primary">Simpan</button>
+  </div>
+</dialog>
+<% } %>
+<script>
+  window.RELATION_AGENTS = <%- JSON.stringify(relationAgents || []) %>;
+  window.FACTORIES = <%- JSON.stringify(factories || []) %>;
+  window.CURRENT_BON_DRIVER = <%- JSON.stringify(b.driver_name || '') %>;
+  window.CURRENT_BON_PLATE = <%- JSON.stringify(b.plate_number || '') %>;
+  window.CURRENT_BON_SPSI_TYPE_ID = <%- JSON.stringify(b.factory_spsi_type_id || '') %>;
+  window.VEHICLE_MAP = <%- JSON.stringify(vehicleMap || {}) %>;
+  window.FACTORY_DEFAULT_PRICES = <%- JSON.stringify(factoryDefaultPrices || {}) %>;
+</script>
+<% if (!locked) { %>
+<script>
+document.querySelector('[name="plate_number"]')?.addEventListener('blur', function() {
+  if (!window.VEHICLE_MAP) return;
+  const plate = this.value.replace(/\s+/g, '').toUpperCase();
+  const potongan = window.VEHICLE_MAP[plate];
+  if (potongan) {
+    const bpInput = document.querySelector('[name="bp_colt"]');
+    if (bpInput) bpInput.value = potongan;
+  }
+});
+</script>
+<% } %>
+<script src="<%= url('/js/bon-form.js') %>"></script>
+<script src="<%= url('/js/drop-ocr.js') %>"></script>
+<% if (!locked) { %>
+<script>
+document.getElementById('add-relation-btn')?.addEventListener('click', () => {
+  document.getElementById('add-relation-dialog').showModal();
+});
+document.getElementById('cancel-add-relation')?.addEventListener('click', () => {
+  document.getElementById('add-relation-dialog').close();
+});
+document.getElementById('confirm-add-relation')?.addEventListener('click', async () => {
+  const name = String(document.getElementById('new-relation-name')?.value || '').trim().toUpperCase();
+  if (!name) { alert('Nama relasi wajib diisi.'); return; }
+  const contact = String(document.getElementById('new-relation-contact')?.value || '').trim();
+  try {
+    const res = await fetch(window.appUrl ? window.appUrl('/relation-agents') : '/relation-agents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ name, contact })
+    });
+    if (!res.ok) { alert('Gagal menyimpan relasi.'); return; }
+
+    // Redirect to current page to reload with data preserved via sessionStorage
+    const ocrData = sessionStorage.getItem('ocr_data');
+    const currentData = {};
+    document.querySelectorAll('[name]').forEach((el) => {
+      if (el.name && el.value) currentData[el.name] = el.value;
+    });
+    sessionStorage.setItem('ocr_data', JSON.stringify(currentData));
+    window.location.reload();
+  } catch (e) { alert('Error: ' + e.message); }
+});
+</script>
+<% } %>
 <%- include('../partials/footer') %>

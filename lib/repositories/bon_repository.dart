@@ -13,21 +13,26 @@ class BonRepository {
     DateTime? startDate,
     DateTime? endDate,
     String? driverQuery,
+    String? factoryId,
   }) async {
-    var query = _client.from('bons').select('*, bon_deductions(*)');
+    var query = _client
+        .from('bons')
+        .select('*, bon_deductions(*), factories(name), relation_agents(name)');
 
     if (startDate != null) {
       query = query.gte('bon_date', startDate.toIso8601String().split('T')[0]);
     }
     if (endDate != null) {
-      // LT with next day (normalized to date only)
-      final nextDay = endDate.add(const Duration(days: 1));
+      final nextDay = DateTime.utc(endDate.year, endDate.month, endDate.day + 1);
       query = query.lt('bon_date', nextDay.toIso8601String().split('T')[0]);
     }
     if (driverQuery != null && driverQuery.isNotEmpty) {
       query = query.or(
         'driver_name.ilike.%$driverQuery%,plate_number.ilike.%$driverQuery%,relation_name.ilike.%$driverQuery%',
       );
+    }
+    if (factoryId != null && factoryId.isNotEmpty) {
+      query = query.eq('factory_id', factoryId);
     }
 
     final response = await query.order('created_at', ascending: false);
@@ -37,10 +42,11 @@ class BonRepository {
   Future<BonModel> createBon(
     BonModel bon,
     Uint8List? imageBytes,
-    String? fileName,
-  ) async {
-    String? imageUrl;
-    if (imageBytes != null && fileName != null) {
+    String? fileName, {
+    String? existingImageUrl,
+  }) async {
+    String? imageUrl = existingImageUrl;
+    if (imageUrl == null && imageBytes != null && fileName != null) {
       final path = 'bons/${DateTime.now().millisecondsSinceEpoch}_$fileName';
       await _client.storage.from('receipts').uploadBinary(path, imageBytes);
       imageUrl = _client.storage.from('receipts').getPublicUrl(path);
@@ -76,10 +82,65 @@ class BonRepository {
     // Refresh to get deductions back
     return (await _client
         .from('bons')
-        .select('*, bon_deductions(*)')
+        .select('*, bon_deductions(*), factories(name), relation_agents(name)')
         .eq('id', createdBon.id)
         .single()
         .then((v) => BonModel.fromJson(v)));
+  }
+
+  Future<void> quickUpdateBon(String id, Map<String, dynamic> changes) async {
+    final current = await _client
+        .from('bons')
+        .select('*, bon_deductions(amount)')
+        .eq('id', id)
+        .single();
+    if (current['status'] == 'LUNAS') {
+      throw Exception('Bon sudah lunas, tidak dapat diedit.');
+    }
+
+    final merged = Map<String, dynamic>.from(current);
+    merged.addAll(changes);
+
+    final netto1 = (merged['netto_1'] as num?)?.toInt() ?? 0;
+    final netto2 = (merged['netto_2'] as num?)?.toInt() ?? 0;
+    final price = (merged['price'] as num?)?.toInt() ?? 0;
+    final dp = (merged['dp'] as num?)?.toInt() ?? 0;
+    final bpColt = (merged['bp_colt'] as num?)?.toInt() ?? 0;
+    final pph = (merged['pph'] as num?)?.toInt() ?? 0;
+    final uangMinum = (merged['uang_minum'] as num?)?.toInt() ?? 0;
+    final deductionTotal = ((merged['bon_deductions'] as List?) ?? [])
+        .fold<int>(0, (sum, d) => sum + ((d['amount'] as num?)?.toInt() ?? 0));
+    final spsiMode = (merged['spsi_calculation_mode'] as String?) ?? 'PER_KG';
+    final spsiRate =
+        (merged['spsi_rate'] as num?)?.toInt() ??
+        (merged['biaya_bongkar'] as num?)?.toInt() ??
+        12;
+    final subtotal = price * netto2;
+    final totalBiayaBongkar = spsiMode == 'FIX' ? spsiRate : spsiRate * netto1;
+    final total =
+        subtotal -
+        dp -
+        totalBiayaBongkar -
+        bpColt -
+        pph -
+        uangMinum -
+        deductionTotal;
+
+    final data = <String, dynamic>{
+      'netto_2': netto2,
+      'price': price,
+      'bp_colt': bpColt,
+      'pph': pph,
+      'uang_minum': uangMinum,
+      'spsi_amount': totalBiayaBongkar,
+      'total': total,
+    };
+
+    await _client.from('bons').update(data).eq('id', id);
+  }
+
+  Future<void> updateRaw(String id, Map<String, dynamic> data) async {
+    await _client.from('bons').update(data).eq('id', id);
   }
 
   Future<void> updateBon(BonModel bon) async {
@@ -89,10 +150,8 @@ class BonRepository {
         .select('status')
         .eq('id', bon.id)
         .single();
-    if (current['status'] != 'BELUM_DIBAYAR') {
-      throw Exception(
-        'Bon sudah diproses (Tertagih/Lunas), tidak dapat diedit.',
-      );
+    if (current['status'] == 'LUNAS') {
+      throw Exception('Bon sudah lunas, tidak dapat diedit.');
     }
 
     final data = bon.toJson();
@@ -113,13 +172,26 @@ class BonRepository {
     // 1. Check current status in DB
     final current = await _client
         .from('bons')
-        .select('status')
+        .select('status, image_url')
         .eq('id', id)
         .single();
     if (current['status'] != 'BELUM_DIBAYAR') {
-      throw Exception(
-        'Bon sudah diproses (Tertagih/Lunas), tidak dapat dihapus.',
-      );
+      throw Exception('Bon sudah dibuat nota atau lunas, tidak dapat dihapus.');
+    }
+
+    // 2. Hapus file dari bucket jika ada
+    final imageUrl = current['image_url'] as String?;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      final pathMatch = RegExp(
+        r'/object/public/[^/]+/(.+)$',
+      ).firstMatch(imageUrl);
+      if (pathMatch != null) {
+        final filePath = pathMatch.group(1)!;
+        await _client.storage
+            .from('receipts')
+            .remove([filePath])
+            .catchError((_) {});
+      }
     }
 
     await _client.from('bons').delete().eq('id', id);

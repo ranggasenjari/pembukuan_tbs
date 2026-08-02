@@ -1,0 +1,43 @@
+<%- include('../partials/header') %>
+<%
+  const item = relationAgent || {};
+  const accounts = item.relation_agent_accounts && item.relation_agent_accounts.length ? item.relation_agent_accounts : [{ account_name: '', account_number: '' }];
+%>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Master Data</p>
+    <h1><%= relationAgent ? 'Edit Relasi / Agen' : 'Tambah Relasi / Agen' %></h1>
+  </div>
+  <a href="<%= url(relationAgent ? `/relation-agents/${relationAgent.id}` : '/relation-agents') %>" class="btn-secondary">Kembali</a>
+</div>
+
+<form method="post" action="<%= url(relationAgent ? `/relation-agents/${relationAgent.id}?_method=PUT` : '/relation-agents') %>" class="space-y-5">
+  <section class="form-card">
+    <h2>Data Relasi / Agen</h2>
+    <div class="grid gap-4 md:grid-cols-3">
+      <label><span class="form-label">Nama Relasi / Agen</span><input required name="name" value="<%= item.name || '' %>" class="form-input uppercase"></label>
+      <label><span class="form-label">Kontak</span><input name="contact" value="<%= item.contact || '' %>" class="form-input"></label>
+      <label class="md:col-span-3"><span class="form-label">Alamat</span><input name="address" value="<%= item.address || '' %>" class="form-input uppercase"></label>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Rekening</h2>
+      <button type="button" id="add-account" class="btn-secondary small">Tambah Rekening</button>
+    </div>
+    <div id="accounts" class="mt-4 space-y-3">
+      <% accounts.forEach((account) => { %>
+        <div class="account-row grid gap-3 md:grid-cols-[1fr_1fr_48px]">
+          <input name="account_name" value="<%= account.account_name || '' %>" class="form-input uppercase" placeholder="Nama Rekening">
+          <input name="account_number" value="<%= account.account_number || '' %>" class="form-input" placeholder="No Rekening">
+          <button type="button" class="remove-account rounded-lg bg-rose-50 text-rose-700">x</button>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <button class="btn-primary">Simpan Relasi / Agen</button>
+</form>
+<script src="<%= url('/js/relation-agent-form.js') %>"></script>
+<%- include('../partials/footer') %>

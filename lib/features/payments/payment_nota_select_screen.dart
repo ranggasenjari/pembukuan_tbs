@@ -16,7 +16,7 @@ class PaymentNotaSelectScreen extends ConsumerStatefulWidget {
 
 class _PaymentNotaSelectScreenState
     extends ConsumerState<PaymentNotaSelectScreen> {
-  // We reuse NotaRepo to get notas, filtering for unpaid/tertagih locally or via query
+  // We reuse NotaRepo to get notas, filtering for waiting-payment notas locally or via query
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +60,7 @@ class _PaymentNotaSelectScreenState
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Tidak ada nota tertagih.',
+                    'Tidak ada nota menunggu pembayaran.',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                   ),
                 ],

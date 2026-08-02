@@ -72,3 +72,6 @@ app_express/sample-nota-a4.pdf
 Thumbs.db
 *.sublime-project
 *.sublime-workspace
+
+/scripts/
+/docs/artifacts/

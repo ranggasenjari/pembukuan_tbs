@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit BP Kendaraan</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f5f6fa; padding: 20px; }
+    .card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; }
+    h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px 12px; font-size: 0.8rem; font-weight: 700; color: #475467; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e4e7ec; }
+    td { padding: 8px 12px; border-bottom: 1px solid #edf0f3; vertical-align: middle; }
+    .inline-input { font-size: 13px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; width: 100%; background: #fff; }
+    .inline-input:focus { border-color: #4318FF; outline: none; box-shadow: 0 0 0 2px rgba(67,24,255,0.1); }
+    .save-btn { font-size: 11px; padding: 3px 10px; border-radius: 4px; border: none; background: #4318FF; color: #fff; cursor: pointer; display: none; }
+    .save-btn:hover { background: #3614d9; }
+    .save-btn:disabled { opacity: 0.5; }
+    .cancel-btn { font-size: 13px; padding: 3px 8px; border-radius: 4px; border: none; background: #fee2e2; color: #dc2626; cursor: pointer; display: none; margin-left: 4px; }
+    .cancel-btn:hover { background: #fecaca; }
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #16a34a; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; z-index: 999; }
+    .toast.error { background: #dc2626; }
+    .drivers { font-size: 12px; color: #64748b; }
+    .drivers div { line-height: 1.4; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .bp-radios { display: flex; gap: 4px; }
+    .bp-radio { display: flex; align-items: center; gap: 2px; font-size: 11px; padding: 3px 8px; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; background: #fff; }
+    .bp-radio.checked { border-color: #4318FF; background: #eef2ff; color: #4318FF; font-weight: 600; }
+    .bp-radio input { display: none; }
+    @media (max-width:600px) { .card { padding: 12px; } th, td { padding: 6px 6px; } .inline-input { font-size: 12px; } .bp-radio { font-size: 10px; padding: 2px 6px; } }
+  </style>
+</head>
+<body>
+<div class="card" style="max-width:800px;margin:0 auto">
+  <h1>Edit BP Kendaraan</h1>
+  <p class="subtitle">Ubah nomor plat atau potongan BP. Perubahan akan otomatis diterapkan ke semua bon terkait.</p>
+
+  <div class="table-wrap"><table>
+    <thead>
+      <tr>
+        <th style="width:32px">#</th>
+        <th style="width:22%">Plat Nomor</th>
+        <th style="width:30%">Driver / Relasi / Pabrik</th>
+        <th style="width:15%">Pot. BP</th>
+        <th style="width:15%">Harga</th>
+        <th style="width:70px"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (!vehicles.length) { %>
+        <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px">Belum ada data kendaraan.</td></tr>
+      <% } %>
+      <% vehicles.forEach((v, i) => { %>
+        <tr data-id="<%= v.id %>" data-old-plate="<%= v.plate_number %>" data-old-bp="<%= v.potongan_bp %>" data-old-harga="<%= v.harga ?? '' %>">
+          <td class="text-slate-400 text-sm text-center"><%= i + 1 %></td>
+          <td><input class="inline-input plate-input" value="<%= v.plate_number %>"></td>
+          <td class="drivers">
+            <% if (v.driver_list.length) { %><div><%= v.driver_list.join(', ') %></div><% } %>
+            <% if (v.relation_list.length) { %><div class="text-slate-400"><%= v.relation_list.join(', ') %></div><% } %>
+            <% if (v.factory_list.length) { %><div class="text-slate-400 text-xs"><%= v.factory_list.join(', ') %></div><% } %>
+            <% if (!v.driver_list.length && !v.relation_list.length && !v.factory_list.length) { %><span class="text-slate-400"><%= v.driver_name || '-' %></span><% } %>
+          </td>
+          <td>
+            <div class="bp-radios">
+              <label class="bp-radio <%= v.potongan_bp == 0 ? 'checked' : '' %>"><input type="radio" name="bp_<%= v.id %>" value="0" class="bp-input" <%= v.potongan_bp == 0 ? 'checked' : '' %>>0</label>
+              <label class="bp-radio <%= v.potongan_bp == 50000 ? 'checked' : '' %>"><input type="radio" name="bp_<%= v.id %>" value="50000" class="bp-input" <%= v.potongan_bp == 50000 ? 'checked' : '' %>>50</label>
+              <label class="bp-radio <%= v.potongan_bp == 70000 ? 'checked' : '' %>"><input type="radio" name="bp_<%= v.id %>" value="70000" class="bp-input" <%= v.potongan_bp == 70000 ? 'checked' : '' %>>70</label>
+              <label class="bp-radio <%= v.potongan_bp == 100000 ? 'checked' : '' %>"><input type="radio" name="bp_<%= v.id %>" value="100000" class="bp-input" <%= v.potongan_bp == 100000 ? 'checked' : '' %>>100</label>
+            </div>
+          </td>
+          <td><input class="inline-input harga-input" value="<%= v.harga ?? '' %>" placeholder="0" type="number" style="width:80px"></td>
+          <td><button class="save-btn">Simpan</button><button class="cancel-btn">✕</button></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const BASE = '<%= basePath || "" %>';
+
+  document.querySelectorAll('tr[data-id]').forEach(row => {
+    const plateInput = row.querySelector('.plate-input');
+    const bpRadios = row.querySelectorAll('.bp-input');
+    const hargaInput = row.querySelector('.harga-input');
+    const saveBtn = row.querySelector('.save-btn');
+    const cancelBtn = row.querySelector('.cancel-btn');
+    const id = row.dataset.id;
+    const oldPlate = row.dataset.oldPlate;
+
+    function getBpValue() {
+      const checked = row.querySelector('.bp-input:checked');
+      return checked ? checked.value : '0';
+    }
+
+    function markDirty() { saveBtn.style.display = 'inline-block'; cancelBtn.style.display = 'inline-block'; }
+    function hideButtons() { saveBtn.style.display = 'none'; cancelBtn.style.display = 'none'; }
+
+    function updateRadioStyle() {
+      bpRadios.forEach(r => {
+        r.closest('.bp-radio').classList.toggle('checked', r.checked);
+      });
+    }
+
+    cancelBtn.addEventListener('click', () => {
+      plateInput.value = row.dataset.oldPlate;
+      bpRadios.forEach(r => { r.checked = r.value === row.dataset.oldBp; });
+      updateRadioStyle();
+      hargaInput.value = row.dataset.oldHarga;
+      hideButtons();
+    });
+
+    plateInput.addEventListener('input', markDirty);
+    bpRadios.forEach(r => r.addEventListener('change', () => { updateRadioStyle(); markDirty(); }));
+    hargaInput.addEventListener('input', markDirty);
+
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = '...';
+      const body = {};
+      const currentBp = getBpValue();
+      if (plateInput.value.trim().toUpperCase() !== oldPlate) body.plate_number = plateInput.value;
+      if (Number(currentBp) !== Number(row.dataset.oldBp)) body.potongan_bp = currentBp;
+      if (hargaInput.value !== row.dataset.oldHarga) body.harga = hargaInput.value || null;
+
+      if (Object.keys(body).length === 0) { saveBtn.style.display = 'none'; saveBtn.disabled = false; saveBtn.textContent = 'Simpan'; return; }
+
+      try {
+        const res = await fetch(BASE + '/api/vehicles/publik/' + id, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Gagal');
+        row.dataset.oldPlate = plateInput.value.trim().toUpperCase();
+        row.dataset.oldBp = currentBp;
+        row.dataset.oldHarga = hargaInput.value;
+        showToast('Tersimpan');
+        saveBtn.style.display = 'none';
+      } catch (e) {
+        showToast(e.message, true);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Simpan';
+      }
+    });
+  });
+
+  function showToast(msg, isError) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3000);
+  }
+</script>
+</body>
+</html>

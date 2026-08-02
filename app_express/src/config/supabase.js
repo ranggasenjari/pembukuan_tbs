@@ -27,4 +27,9 @@ function createUserClient(accessToken) {
   return createClient(env.supabaseUrl, env.supabaseAnonKey, baseOptions(accessToken));
 }
 
-module.exports = { createAnonClient, createUserClient };
+function createServiceClient() {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null;
+  return createClient(env.supabaseUrl, env.supabaseServiceRoleKey, baseOptions());
+}
+
+module.exports = { createAnonClient, createServiceClient, createUserClient };

@@ -4,14 +4,22 @@
     <p class="eyebrow">Nota</p>
     <h1><%= nota ? 'Edit Nota' : 'Buat Nota' %></h1>
   </div>
-  <a href="<%= nota ? `/notas/${nota.id}` : '/notas' %>" class="btn-secondary">Kembali</a>
+  <a href="<%= url(nota ? `/notas/${nota.id}` : '/notas') %>" class="btn-secondary">Kembali</a>
 </div>
-<form method="post" action="<%= nota ? `/notas/${nota.id}?_method=PUT` : '/notas' %>" class="space-y-5">
+<form method="post" action="<%= url(nota ? `/notas/${nota.id}?_method=PUT` : '/notas') %>" class="space-y-5">
   <section class="form-card">
-    <h2>Data Penerima</h2>
+    <h2>Data Relasi/Agen</h2>
     <div class="grid gap-4 md:grid-cols-2">
-      <label><span class="form-label">Kepada</span><input required name="recipient_name" value="<%= nota?.recipient_name || '' %>" class="form-input uppercase"></label>
-      <label><span class="form-label">Alamat</span><input name="recipient_address" value="<%= nota?.recipient_address || '' %>" class="form-input uppercase"></label>
+      <label>
+        <span class="form-label">Relasi / Agen</span>
+        <select required name="relation_agent_id" class="form-input">
+          <option value="">Pilih Relasi / Agen</option>
+          <% (relationAgents || []).forEach((relation) => { %>
+            <option value="<%= relation.id %>" <%= nota?.relation_agent_id === relation.id || (!nota?.relation_agent_id && nota?.recipient_name === relation.name) ? 'selected' : '' %>><%= relation.name %></option>
+          <% }) %>
+        </select>
+      </label>
+      <div id="relation-info" class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"></div>
     </div>
   </section>
   <section class="form-card">
@@ -26,7 +34,7 @@
           <input type="checkbox" name="bon_ids" value="<%= bon.id %>" data-total="<%= bon.total %>" <%= checked ? 'checked' : '' %>>
           <span>
             <strong><%= bon.plate_number %></strong>
-            <small><%= format.date(bon.bon_date) %> • <%= format.number(bon.netto_2) %> kg • <%= format.statusLabel(bon.status) %></small>
+            <small><%= format.date(bon.bon_date) %> &bull; <%= format.number(bon.netto_2) %> kg &bull; <%= bon.factories?.name || '-' %> &bull; <%= bon.relation_agents?.name || bon.relation_name || '-' %></small>
           </span>
           <b><%= format.currency(bon.total) %></b>
         </label>
@@ -35,5 +43,8 @@
   </section>
   <button class="btn-primary"><%= nota ? 'Update Nota' : 'Generate Nota' %></button>
 </form>
-<script src="/js/nota-form.js"></script>
+<script>
+  window.RELATION_AGENTS = <%- JSON.stringify(relationAgents || []) %>;
+</script>
+<script src="<%= url('/js/nota-form.js') %>"></script>
 <%- include('../partials/footer') %>

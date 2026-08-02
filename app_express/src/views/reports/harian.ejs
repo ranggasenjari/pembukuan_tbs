@@ -1,0 +1,47 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Cetakan</p>
+    <h1>Riwayat Cetakan Harian</h1>
+    <p class="text-sm text-slate-500">Daftar file PDF harian yang dicetak dari menu Buku Besar</p>
+  </div>
+</div>
+
+<section class="form-card">
+  <h2>Riwayat Cetakan</h2>
+  <% if (!history.length) { %>
+    <p class="empty">Belum ada cetakan harian tersimpan. Cetak dari menu Buku Besar.</p>
+  <% } else { %>
+  <div class="table-card flush">
+    <table>
+      <thead>
+        <tr>
+          <th>Tanggal Cetak</th>
+          <th>Waktu Cetak</th>
+          <th>Pabrik</th>
+          <th>Banyak Bon</th>
+          <th>Total Tonase</th>
+          <th>Total Rupiah</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% history.forEach((item) => { %>
+          <tr>
+            <td><%= format.date(item.date) %></td>
+            <td><%= format.dateTime(item.printed_at) %></td>
+            <td><%= item.factories?.name || 'Semua Pabrik' %></td>
+            <td class="text-right"><%= format.number(item.total_bons) %></td>
+            <td class="text-right"><%= format.number(item.total_tonase) %> ton</td>
+            <td class="text-right"><%= format.currency(item.total_amount) %></td>
+            <td>
+              <a href="<%= url(`/reports/harian/${item.id}/pdf`) %>" target="_blank" class="btn-primary small">Unduh PDF</a>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <% } %>
+</section>
+<%- include('../partials/footer') %>

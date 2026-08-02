@@ -5,10 +5,26 @@
     <h1><%= nota.invoice_number %></h1>
   </div>
   <div class="flex flex-wrap gap-2">
-    <% if (nota.status !== 'LUNAS') { %><a href="/notas/<%= nota.id %>/edit" class="btn-secondary">Edit</a><% } %>
-    <a href="/notas/<%= nota.id %>/pdf" target="_blank" class="btn-secondary pdf-link">PDF A4</a>
-    <a href="/notas/<%= nota.id %>/pdf/thermal" target="_blank" class="btn-secondary pdf-link">PDF Thermal</a>
-    <% if (nota.status === 'TERTAGIH') { %><a href="/payments/new?invoice_id=<%= nota.id %>" class="btn-primary">Bayar</a><% } %>
+    <% if (nota.status !== 'LUNAS') { %><a href="<%= url(`/notas/${nota.id}/edit`) %>" class="btn-secondary">Edit</a><% } %>
+    <a href="<%= url(`/notas/${nota.id}/pdf`) %>" target="_blank" class="btn-secondary pdf-link">PDF A4</a>
+    <a href="<%= url(`/notas/${nota.id}/pdf/thermal`) %>" target="_blank" class="btn-secondary pdf-link">PDF Thermal</a>
+    <button class="btn-secondary" onclick="copyWa(this)">Pesan WA</button>
+    <script>
+      const WA_TEXT = <%- JSON.stringify(whatsappMessage) %>;
+      function copyWa(btn) {
+        navigator.clipboard.writeText(WA_TEXT).then(function() {
+          btn.textContent = 'Tersalin!';
+          btn.style.borderColor = '#16a34a';
+          btn.style.color = '#16a34a';
+          setTimeout(function() {
+            btn.textContent = 'Pesan WA';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+          }, 2000);
+        }).catch(function() { alert('Gagal menyalin teks.'); });
+      }
+    </script>
+    <% if (nota.status === 'TERTAGIH') { %><a href="<%= url(`/payments/new?invoice_id=${nota.id}`) %>" class="btn-primary">Bayar</a><% } %>
   </div>
 </div>
 <% if (share) { %>
@@ -20,14 +36,15 @@
     <h2>Daftar Bon</h2>
     <div class="table-card flush">
       <table>
-        <thead><tr><th>Tanggal</th><th>Plat</th><th>Driver</th><th>Netto</th><th>Total</th></tr></thead>
+        <thead><tr><th>Tanggal</th><th>Plat</th><th>Relasi</th><th>Netto x Harga</th><th>SPSI</th><th>Total</th></tr></thead>
         <tbody>
           <% bons.forEach((bon) => { %>
             <tr>
               <td><%= format.date(bon.bon_date) %></td>
-              <td><a class="link" href="/bons/<%= bon.id %>"><%= bon.plate_number %></a></td>
-              <td><%= bon.driver_name || '-' %></td>
-              <td><%= format.number(bon.netto_2) %> kg</td>
+              <td><a class="link" href="<%= url(`/bons/${bon.id}`) %>"><%= bon.plate_number %></a></td>
+              <td><%= bon.relation_name || '-' %></td>
+              <td><%= format.number(bon.netto_2) %> kg x <%= format.currency(bon.price) %></td>
+              <td><%= format.currency(bon.spsi_amount ?? ((bon.biaya_bongkar || 0) * (bon.netto_1 || 0))) %></td>
               <td class="font-bold"><%= format.currency(bon.total) %></td>
             </tr>
           <% }) %>
@@ -38,14 +55,26 @@
   <aside class="form-card">
     <h2>Ringkasan</h2>
     <dl class="detail-grid">
-      <dt>Penerima</dt><dd><%= nota.recipient_name || '-' %></dd>
+      <dt>Relasi/Agen</dt><dd><%= nota.relation_agents?.name || nota.recipient_name || '-' %></dd>
       <dt>Alamat</dt><dd><%= nota.recipient_address || '-' %></dd>
-      <dt>Status</dt><dd><span class="status <%= nota.status.toLowerCase() %>"><%= format.statusLabel(nota.status) %></span></dd>
+      <dt>Rekening</dt>
+      <dd>
+        <% const accounts = nota.relation_agents?.relation_agent_accounts || []; %>
+        <% if (!accounts.length) { %>-<% } %>
+        <% accounts.forEach((account) => { %>
+          <span class="block"><%= account.account_name || '-' %> - <%= account.account_number || '-' %></span>
+        <% }) %>
+      </dd>
+      <dt>Status</dt>
+      <dd>
+        <span class="status <%= nota.status.toLowerCase() %>" title="<%= format.notaStatusDescription(nota.status) %>"><%= format.notaStatusLabel(nota.status) %></span>
+        <small class="mt-1 block text-xs text-slate-500"><%= format.notaStatusDescription(nota.status) %></small>
+      </dd>
       <dt>Total</dt><dd class="text-xl font-black text-emerald-700"><%= format.currency(nota.total_amount) %></dd>
     </dl>
-    <button type="button" class="mt-4 btn-secondary w-full" data-share-pdf="/notas/<%= nota.id %>/pdf/thermal" data-share-title="Nota <%= nota.invoice_number %>">Share PDF</button>
+    <button type="button" class="mt-4 btn-secondary w-full" data-share-pdf="<%= url(`/notas/${nota.id}/pdf/thermal`) %>" data-share-title="Nota <%= nota.invoice_number %>">Share PDF</button>
     <% if (nota.status !== 'LUNAS') { %>
-      <form method="post" action="/notas/<%= nota.id %>?_method=DELETE" data-confirm="Hapus nota ini?" class="mt-2">
+      <form method="post" action="<%= url(`/notas/${nota.id}?_method=DELETE`) %>" data-confirm="Hapus nota ini?" class="mt-2">
         <button class="btn-danger w-full">Hapus Nota</button>
       </form>
     <% } %>
@@ -64,5 +93,5 @@
     <% }) %>
   </div>
 </section>
-<script src="/js/share-pdf.js"></script>
+<script src="<%= url('/js/share-pdf.js') %>"></script>
 <%- include('../partials/footer') %>

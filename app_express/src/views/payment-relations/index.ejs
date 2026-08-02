@@ -1,0 +1,60 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Master Data</p>
+    <h1>Relasi Bayar</h1>
+  </div>
+  <a href="<%= url('/payment-relations/new') %>" class="btn-primary">Tambah Relasi Bayar</a>
+</div>
+
+<form class="filter-bar">
+  <input name="q" value="<%= filters.q || '' %>" class="form-input compact" placeholder="Cari nama, asal, kontak">
+  <button class="btn-secondary">Filter</button>
+</form>
+
+<div class="table-card">
+  <table>
+    <thead><tr><th>Nama</th><th>Kontak</th><th>Kendaraan</th><th>Rekening</th><th></th></tr></thead>
+    <tbody>
+      <% if (!paymentRelations.length) { %><tr><td colspan="5" class="empty">Belum ada data relasi bayar.</td></tr><% } %>
+      <% paymentRelations.forEach((item) => { %>
+        <% const vehicleCount = (item.payment_relation_vehicles || []).length; %>
+        <% const accountCount = (item.payment_relation_accounts || []).length; %>
+        <tr>
+          <td>
+            <div class="font-bold"><%= item.name %></div>
+            <div class="text-xs text-slate-500"><%= item.address || '-' %></div>
+            <% if (item.notes) { %><div class="text-xs text-slate-400"><%= item.notes %></div><% } %>
+          </td>
+          <td><%= item.contact || '-' %></td>
+          <td class="text-xs">
+            <% const vehicles = (item.payment_relation_vehicles || []).filter(v => v.vehicles?.plate_number); %>
+            <% if (vehicles.length) { %>
+              <ol class="list-decimal list-inside m-0 p-0" style="list-style-type:decimal">
+                <% vehicles.forEach(v => { %>
+                  <li><%= v.vehicles.plate_number %></li>
+                <% }) %>
+              </ol>
+            <% } else { %>
+              -
+            <% } %>
+          </td>
+          <td class="text-xs">
+            <% const accounts = (item.payment_relation_accounts || []).filter(a => a.bank_name || a.account_number); %>
+            <% if (accounts.length) { %>
+              <ol class="list-decimal list-inside m-0 p-0" style="list-style-type:decimal">
+                <% accounts.forEach(a => { %>
+                  <li><%= [a.bank_name, a.account_number, a.account_name].filter(Boolean).join(' - ') %></li>
+                <% }) %>
+              </ol>
+            <% } else { %>
+              -
+            <% } %>
+          </td>
+          <td class="text-right"><a href="<%= url(`/payment-relations/${item.id}`) %>" class="link">Detail</a></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../partials/footer') %>

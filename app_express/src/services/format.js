@@ -44,4 +44,55 @@ function statusLabel(status) {
   return map[status] || status || '-';
 }
 
-module.exports = { currency, date, dateInput, dateTime, number, statusLabel };
+function labelFrom(map, status) {
+  return map[status] || statusLabel(status);
+}
+
+function descriptionFrom(map, status) {
+  return map[status] || '';
+}
+
+function bonStatusLabel(status) {
+  return labelFrom({
+    BELUM_DIBAYAR: 'Belum Dibuat Nota',
+    TERTAGIH: 'Menunggu Pembayaran',
+    LUNAS: 'Lunas'
+  }, status);
+}
+
+function bonStatusDescription(status) {
+  return descriptionFrom({
+    BELUM_DIBAYAR: 'Bon belum masuk nota dan masih bisa diedit atau dihapus.',
+    TERTAGIH: 'Bon sudah masuk nota dan menunggu pembayaran atau bukti transfer.',
+    LUNAS: 'Bon sudah selesai dibayar.'
+  }, status);
+}
+
+function notaStatusLabel(status) {
+  return labelFrom({
+    BELUM_DIBAYAR: 'Belum Terbit / Data Lama',
+    TERTAGIH: 'Menunggu Pembayaran',
+    LUNAS: 'Lunas'
+  }, status);
+}
+
+function notaStatusDescription(status) {
+  return descriptionFrom({
+    BELUM_DIBAYAR: 'Status lama: nota belum ditandai terbit. Jalankan cleanup untuk menormalkan data.',
+    TERTAGIH: 'Nota sudah terbit dan menunggu pembayaran atau bukti transfer.',
+    LUNAS: 'Nota sudah memiliki pembayaran.'
+  }, status);
+}
+
+module.exports = {
+  bonStatusDescription,
+  bonStatusLabel,
+  currency,
+  date,
+  dateInput,
+  dateTime,
+  notaStatusDescription,
+  notaStatusLabel,
+  number,
+  statusLabel
+};

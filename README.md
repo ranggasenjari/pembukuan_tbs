@@ -28,6 +28,13 @@ flutter pub get
 flutter run
 ```
 
+Atau gunakan helper lokal:
+
+```bash
+scripts/dev/run-dev.sh
+scripts/dev/run-dev.bat
+```
+
 Ledger report:
 
 ```bash
@@ -56,7 +63,7 @@ Semua credential disimpan di `.env` masing-masing aplikasi dan tidak boleh di-co
 - `EXTERNAL_API_KEY` untuk API eksternal
 - `SUPABASE_API_USER_EMAIL` dan `SUPABASE_API_USER_PASSWORD` untuk user sistem API
 
-Dokumentasi API eksternal ada di `app_express/docs/api.md`.
+Dokumentasi API eksternal ada di `app_express/docs/api.md`. Dokumentasi project, catatan keamanan, schema pendukung, dan artefak referensi ada di `docs/`.
 
 ## Catatan
 

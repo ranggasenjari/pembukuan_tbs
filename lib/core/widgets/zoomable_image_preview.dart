@@ -38,6 +38,17 @@ class ZoomableImagePreview extends StatelessWidget {
   }
 
   void _showImageDetail(BuildContext context, ImageProvider imageProvider) {
+    _showFullScreenImage(context, imageProvider);
+  }
+
+  static void showImageDialog(BuildContext context, {Uint8List? imageBytes, String? imageUrl}) {
+    final ImageProvider provider = imageBytes != null
+        ? MemoryImage(imageBytes)
+        : NetworkImage(imageUrl!) as ImageProvider;
+    _showFullScreenImage(context, provider);
+  }
+
+  static void _showFullScreenImage(BuildContext context, ImageProvider imageProvider) {
     showDialog(
       context: context,
       builder: (context) => Dialog(

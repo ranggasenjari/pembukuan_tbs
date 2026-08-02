@@ -20,7 +20,7 @@ class ExpenseRepository {
       );
     }
     if (endDate != null) {
-      final nextDay = endDate.add(const Duration(days: 1));
+      final nextDay = DateTime.utc(endDate.year, endDate.month, endDate.day + 1);
       query = query.lt('expense_date', nextDay.toIso8601String().split('T')[0]);
     }
 

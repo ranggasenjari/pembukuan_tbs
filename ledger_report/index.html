@@ -166,7 +166,12 @@
         </div>
 
         <!-- Global Summary Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10 no-print">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6 mb-10 no-print">
+            <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-blue-500 shadow-xl">
+                <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Bon</p>
+                <h2 id="summary-bons" class="text-3xl   text-white">0</h2>
+                <p class="text-[10px] text-slate-500 mt-2">BULAN BERJALAN</p>
+            </div>
             <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-blue-500 shadow-xl">
                 <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Berat (MT)</p>
                 <div class="flex items-baseline gap-2">
@@ -178,17 +183,22 @@
             <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-emerald-500 shadow-xl">
                 <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Pembayaran</p>
                 <h2 id="summary-payment" class="text-3xl   text-emerald-400">Rp 0</h2>
+                <p class="text-[10px] text-slate-500 mt-2 tracking-widest uppercase">Total belum dibayar</p>
+                <p id="summary-unpaid" class="text-sm font-bold text-amber-300">Rp 0</p>
                 <p class="text-[10px] text-slate-500 mt-2 tracking-widest uppercase">Bulan Berjalan</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-rose-500 shadow-xl">
                 <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Pengeluaran</p>
                 <h2 id="summary-expense" class="text-3xl   text-rose-400">Rp 0</h2>
+                <div class="mt-3 pt-3 border-t border-slate-700/50 flex items-baseline justify-between gap-2">
+                    <span class="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Laba Bersih</span>
+                    <span id="summary-profit" class="text-xl font-bold text-amber-400">Rp 0</span>
+                </div>
                 <p class="text-[10px] text-slate-500 mt-2 tracking-widest uppercase">Bulan Berjalan</p>
             </div>
-            <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-amber-500 shadow-xl">
-                <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Total Laba Bersih</p>
-                <h2 id="summary-profit" class="text-3xl   text-amber-400">Rp 0</h2>
-                <p class="text-[10px] text-slate-500 mt-2 tracking-widest uppercase">Bulan Berjalan</p>
+            <div class="bg-slate-800 p-6 rounded-3xl border-l-8 border-purple-500 shadow-xl">
+                <p class="text-slate-400 text-xs   uppercase mb-2 tracking-widest">Jumlah Bon per Pabrik</p>
+                <div id="factory-bon-count" class="max-h-[200px] overflow-y-auto pr-1 space-y-2"></div>
             </div>
         </div>
 
@@ -206,6 +216,10 @@
 
         async function init() {
             try {
+                const today = getTodayStr();
+                document.getElementById('start-date').value = today;
+                document.getElementById('end-date').value = today;
+
                 // Initial fetch
                 await refreshData();
 
@@ -261,16 +275,19 @@
             }, 500);
         }
 
-        async function refreshData(startDate = null, endDate = null) {
+        function getTodayStr() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        async function refreshData(startDate = getTodayStr(), endDate = getTodayStr()) {
             try {
                 // Fetch Summary
-                const summaryRes = await fetch(`/api/summary${startDate ? '?since=' + startDate : ''}`);
+                const summaryRes = await fetch(`/api/summary?since=${startDate}`);
                 const summary = await summaryRes.json();
                 updateSummary(summary);
 
                 // Fetch Ledger
-                let ledgerUrl = '/api/ledger';
-                if (startDate && endDate) ledgerUrl += `?start=${startDate}&end=${endDate}`;
+                let ledgerUrl = `/api/ledger?start=${startDate}&end=${endDate}`;
                 const ledgerRes = await fetch(ledgerUrl);
                 const ledger = await ledgerRes.json();
                 renderDashboard(ledger.margins, ledger.inProgress);
@@ -280,10 +297,27 @@
         }
 
         function updateSummary(data) {
+            document.getElementById('summary-bons').innerText = (data.totalBons || 0).toLocaleString('id-ID');
             document.getElementById('summary-weight').innerText = data.totalWeight.toFixed(2);
             document.getElementById('summary-payment').innerText = formatCurrency(data.totalPayment);
+            document.getElementById('summary-unpaid').innerText = formatCurrency(data.totalUnpaid || 0);
             document.getElementById('summary-expense').innerText = formatCurrency(data.totalExp);
             document.getElementById('summary-profit').innerText = formatCurrency(data.totalNetProfit);
+
+            // Render bons count per factory (5th stat widget)
+            const factoryBox = document.getElementById('factory-bon-count');
+            const byFactory = data.bonsByFactory || {};
+            const entries = Object.entries(byFactory).sort((a, b) => b[1] - a[1]);
+            if (entries.length === 0) {
+                factoryBox.innerHTML = '<span class="text-slate-600 italic text-xs">Tidak ada data</span>';
+            } else {
+                factoryBox.innerHTML = entries.map(([name, count]) => `
+                    <div class="flex items-center justify-between bg-slate-700/50 px-2 py-1.5 rounded-lg border border-slate-600">
+                        <span class="text-[11px] font-bold text-slate-200 truncate mr-2">${name}</span>
+                        <span class="text-emerald-400 text-2xl font-black leading-none whitespace-nowrap">${count.toLocaleString('id-ID')}</span>
+                    </div>
+                `).join('');
+            }
         }
 
         function renderDashboard(margins, ipBons) {
@@ -307,10 +341,12 @@
                                 <tr>
                                     <th class="p-4 border-r border-slate-700/50">TGL</th>
                                     <th class="p-4 border-r border-slate-700/50">NOPOL</th>
+                                    <th class="p-4 border-r border-slate-700/50">PABRIK</th>
                                     <th class="p-4 border-r border-slate-700/50 text-right">NETTO (KG)</th>
                                     <th class="p-4 border-r border-slate-700/50 text-right">HARGA (RP)</th>
-                                    <th class="p-4 border-r border-slate-700/50">STATUS NOTA</th>
-                                    <th class="p-4">STATUS BAYAR</th>
+                                    <th class="p-4 border-r border-slate-700/50 text-right">POTONGAN (RP)</th>
+                                    <th class="p-4 border-r border-slate-700/50 text-right">TOTAL (RP)</th>
+                                    <th class="p-4 text-center">STATUS BAYAR</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-700/50 text-xs tv-opt">
@@ -321,17 +357,35 @@
                     const nota = notaItem ? notaItem.notas : null;
                     const payment = nota && nota.payments && nota.payments[0];
 
+                    const spsi = Number(bon.spsi_amount || (Number(bon.biaya_bongkar || 0) * Number(bon.netto_1 || 0)));
+                    const bp = Number(bon.bp_colt || 0);
+                    const pph = Number(bon.pph || 0);
+                    const uangMinum = Number(bon.uang_minum || 0);
+                    const deductions = (bon.bon_deductions || []).reduce((sum, d) => sum + Number(d.amount || 0), 0);
+                    const totalPot = spsi + bp + pph + uangMinum + deductions;
+
+                    const potRows = [
+                        spsi > 0 ? `<div class="flex justify-between gap-3"><span>SPSI</span><span>${formatCurrency(spsi)}</span></div>` : null,
+                        bp > 0 ? `<div class="flex justify-between gap-3"><span>BP</span><span>${formatCurrency(bp)}</span></div>` : null,
+                        pph > 0 ? `<div class="flex justify-between gap-3"><span>PPh</span><span>${formatCurrency(pph)}</span></div>` : null,
+                        uangMinum > 0 ? `<div class="flex justify-between gap-3"><span>U.Minum</span><span>${formatCurrency(uangMinum)}</span></div>` : null,
+                        ...(bon.bon_deductions || []).map(d => `<div class="flex justify-between gap-3"><span>${d.label}</span><span>${formatCurrency(d.amount)}</span></div>`)
+                    ].filter(x => x).join('');
+
                     html += `
                         <tr class="hover:bg-slate-700/20 transition">
-                            <td class="p-4 border-r border-slate-700/30">${formatDateShort(bon.bon_date)}</td>
-                            <td class="p-4 border-r border-slate-700/30   text-slate-200 text-lg uppercase">${bon.plate_number}</td>
-                            <td class="p-4 border-r border-slate-700/30 text-right   text-white text-lg">${Number(bon.netto_1).toLocaleString('id-ID')}</td>
-                            <td class="p-4 border-r border-slate-700/30 text-right text-slate-400 font-bold">Rp ${Number(bon.price).toLocaleString('id-ID')}</td>
-                            <td class="p-4 border-r border-slate-700/30">
-                                ${nota ? `<span class="bg-green-900/40 text-green-400 px-2 py-1 rounded text-[10px] font-mono">${nota.invoice_number}</span>` : `<span class="text-slate-600 italic">Belum Terbit</span>`}
+                            <td class="p-4 border-r border-slate-700/30">${formatDateWithTime(bon.created_at)}</td>
+                            <td class="p-4 border-r border-slate-700/30   text-slate-200 text-2xl font-bold uppercase">${bon.plate_number}</td>
+                            <td class="p-4 border-r border-slate-700/30   text-slate-300">${bon.factories?.name || '-'}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right   text-white text-2xl font-bold">${Number(bon.netto_1).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right text-slate-400 text-2xl font-bold">Rp ${Number(bon.price).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right text-slate-300 font-bold">
+                                ${potRows}
+                                <div class="flex justify-between gap-3 border-t border-slate-600/50 pt-1 text-slate-200 font-black">Total<span>${formatCurrency(totalPot)}</span></div>
                             </td>
-                            <td class="p-4">
-                                ${payment ? `<span class="text-emerald-500 font-bold">Terbayar (${formatCurrency(payment.amount_paid)})</span>` : `<span class="text-slate-600 italic">Belum Bayar</span>`}
+                            <td class="p-4 border-r border-slate-700/30 text-right text-emerald-300 text-2xl font-black">${formatCurrency(bon.total || 0)}</td>
+                            <td class="p-4 text-center">
+                                ${payment ? `<svg class="h-8 w-8 text-emerald-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>` : ''}
                             </td>
                         </tr>
                     `;
@@ -367,9 +421,10 @@
                                 <tr class="text-slate-400   uppercase text-xs tracking-widest">
                                     <th class="border-r border-slate-700">TGL</th>
                                     <th class="border-r border-slate-700">NOPOL</th>
+                                    <th class="border-r border-slate-700">PABRIK</th>
                                     <th class="border-r border-slate-700 text-center">NETTO (KG)</th>
                                     <th class="border-r border-slate-700 text-center text-emerald-500">HARGA</th>
-                                    <th class="border-r border-slate-700 text-center text-rose-500 width-48">POTONGAN</th>
+                                    <th class="border-r border-slate-700 text-center text-slate-400 width-48">POTONGAN</th>
                                     <th class="border-r border-slate-700 text-right">PEMBAYARAN NOTA</th>
                                     <th class="border-r border-slate-700 text-right bg-blue-900/30 font-bold">BYR OFFTAKER</th>
                                     <th class="border-r border-slate-700 text-right bg-green-900/30 font-bold text-green-400">PROFIT</th>
@@ -391,7 +446,7 @@
                 payments.forEach(payment => {
                     const invoice = payment.notas;
                     const bList = (invoice?.nota_items || []).map(i => i.bons).filter(b => b != null);
-                    bList.sort((a, b) => new Date(a.bon_date) - new Date(b.bon_date));
+                    bList.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
                     let invFirstRow = true;
 
@@ -414,11 +469,12 @@
 
                         html += `
                         <tr class="hover:bg-slate-700/30 transition">
-                            <td class="border-r border-slate-700/30 whitespace-nowrap font-bold">${formatDateShort(bon.bon_date)}</td>
-                            <td class="border-r border-slate-700/30   text-slate-100 uppercase text-lg">${bon.plate_number}</td>
-                            <td class="border-r border-slate-700/30 text-right   text-white text-lg">${Number(bon.netto_1).toLocaleString('id-ID')}</td>
-                            <td class="border-r border-slate-700/30 text-right font-bold text-slate-400">Rp ${Number(bon.price).toLocaleString('id-ID')}</td>
-                            <td class="border-r border-slate-700/30 text-right text-rose-400/80 font-semibold cursor-help" title="${breakdown}">${Number(totalPot).toLocaleString('id-ID')}</td>
+                            <td class="border-r border-slate-700/30 whitespace-nowrap font-bold">${formatDateWithTime(bon.created_at)}</td>
+                            <td class="border-r border-slate-700/30   text-slate-100 uppercase text-2xl font-bold">${bon.plate_number}</td>
+                            <td class="border-r border-slate-700/30   text-slate-300">${bon.factories?.name || '-'}</td>
+                            <td class="border-r border-slate-700/30 text-right   text-white text-2xl font-bold">${Number(bon.netto_1).toLocaleString('id-ID')}</td>
+                            <td class="border-r border-slate-700/30 text-right text-slate-400 text-2xl font-bold">Rp ${Number(bon.price).toLocaleString('id-ID')}</td>
+                            <td class="border-r border-slate-700/30 text-right text-slate-300 text-2xl font-bold cursor-help" title="${breakdown}">${Number(totalPot).toLocaleString('id-ID')}</td>
                         `;
 
                         if (invFirstRow) {
@@ -459,7 +515,7 @@
                     </tbody>
                     <tfoot class="bg-slate-900/80 border-t-2 border-slate-700/50   text-white uppercase text-[10px]">
                         <tr>
-                            <td colspan="2" class="p-4 text-center border-r border-slate-700/30 text-slate-500">TOTAL GROUP</td>
+                            <td colspan="3" class="p-4 text-center border-r border-slate-700/30 text-slate-500">TOTAL GROUP</td>
                             <td class="p-4 text-right border-r border-slate-700/30 text-lg text-white">${Number(groupTotalNetto).toLocaleString('id-ID')}</td>
                             <td class="p-4 border-r border-slate-700/30"></td>
                             <td class="p-4 text-right border-r border-slate-700/30 text-lg text-rose-400">Rp ${Number(groupTotalPotongan).toLocaleString('id-ID')}</td>
@@ -482,6 +538,13 @@
         function formatDateShort(str) {
             const d = new Date(str);
             return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+        }
+
+        function formatDateWithTime(str) {
+            const d = new Date(str);
+            const date = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+            const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            return `<div class="text-xl font-bold">${date}</div><div class="text-lg text-slate-400 font-mono mt-0.5">${time}</div>`;
         }
 
         function updateClock() {
@@ -514,8 +577,9 @@
 
         function resetLive() {
             isLive = true;
-            document.getElementById('start-date').value = '';
-            document.getElementById('end-date').value = '';
+            const today = getTodayStr();
+            document.getElementById('start-date').value = today;
+            document.getElementById('end-date').value = today;
             refreshData();
             // SSE will stay active, just update status if it was changed
         }

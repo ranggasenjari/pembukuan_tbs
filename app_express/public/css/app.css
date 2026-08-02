@@ -61,21 +61,6 @@ body {
   backdrop-filter: blur(14px);
 }
 
-.topbar-kicker {
-  color: var(--muted);
-  font-size: 0.73rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.topbar-title {
-  color: var(--text);
-  font-size: 1rem;
-  font-weight: 850;
-  margin-top: 2px;
-}
-
 .topbar-actions {
   display: flex;
   gap: 10px;

@@ -22,21 +22,27 @@ cp .env.example .env
 # Isi dengan credentials lokal:
 # - SUPABASE_URL: Dapatkan dari Supabase project settings
 # - SUPABASE_ANON_KEY: Dapatkan dari Supabase API keys
+# - SUPABASE_SCHEMA: Schema database aplikasi, default inv
 # - SESSION_SECRET: Generate random string (min 32 chars)
 # - EXTERNAL_API_KEY: Generate random string (min 32 chars)
 # - SUPABASE_API_USER_EMAIL: Email user sistem untuk API
 # - SUPABASE_API_USER_PASSWORD: Password user sistem (JANGAN sama dengan other users!)
+# - BASE_PATH: Isi jika app dipublish di subpath, contoh /bon
 ```
 
 **Minimal required variables di `.env`:**
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SCHEMA=inv
 SESSION_SECRET=very-long-random-secret-at-least-32-characters
 EXTERNAL_API_KEY=very-long-random-api-key-at-least-32-characters
 SUPABASE_API_USER_EMAIL=api-user@your-company.com
 SUPABASE_API_USER_PASSWORD=secure-password-for-api-user
+BASE_PATH=/bon
 ```
+
+Jika dipasang di reverse proxy path `/bon/`, set `BASE_PATH=/bon` agar redirect, asset, form, PDF, dan API memakai prefix yang sama.
 
 ### 3. Run Development Server
 
@@ -65,7 +71,7 @@ Di production (Railway, Heroku, etc):
 3. Rotate credentials setiap 3-6 bulan
 4. Monitor API key usage di Supabase dashboard
 
-Untuk lebih lengkap, baca [SECURITY.md](../SECURITY.md)
+Untuk lebih lengkap, baca [SECURITY.md](../docs/SECURITY.md) dan [DEPLOY.md](docs/DEPLOY.md).
 
 ## Fitur
 

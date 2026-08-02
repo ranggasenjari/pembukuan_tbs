@@ -1,10 +1,10 @@
 <%- include('../partials/header') %>
 <div class="page-head">
   <div>
-    <p class="eyebrow">Operasional</p>
+    <p class="eyebrow">Operasional <span id="realtime-status" style="font-size:10px;vertical-align:middle;margin-left:4px" title="Realtime">○</span></p>
     <h1>Slip Timbangan</h1>
   </div>
-  <a href="/bons/new" class="btn-primary">Tambah Bon</a>
+  <a href="<%= url('/bons/new') %>" class="btn-primary">Tambah Bon</a>
 </div>
 
 <form class="filter-bar">
@@ -14,51 +14,231 @@
   <select name="status" class="form-input compact">
     <option value="">Semua Status</option>
     <% ['BELUM_DIBAYAR','TERTAGIH','LUNAS'].forEach((status) => { %>
-      <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= format.statusLabel(status) %></option>
+      <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= format.bonStatusLabel(status) %></option>
+    <% }) %>
+  </select>
+  <select name="factory_id" class="form-input compact">
+    <option value="">Semua Pabrik</option>
+    <% (factories || []).forEach((f) => { %>
+      <option value="<%= f.id %>" <%= filters.factory_id === f.id ? 'selected' : '' %>><%= f.name %></option>
     <% }) %>
   </select>
   <button class="btn-secondary">Filter</button>
 </form>
 
+<section class="metric-grid mb-5">
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-icon teal"><i data-lucide="receipt-text"></i></span>
+      <span class="stat-label">Bon Tersimpan</span>
+    </div>
+    <strong><%= format.number(summary.totalBons) %></strong>
+    <small>Jumlah bon sesuai filter aktif</small>
+  </div>
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-icon amber"><i data-lucide="file-plus-2"></i></span>
+      <span class="stat-label">Belum Dibuat Nota</span>
+    </div>
+    <strong><%= format.number(summary.unbilledBons) %></strong>
+    <small>Belum masuk nota dan masih bisa diedit</small>
+  </div>
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-icon blue"><i data-lucide="scale"></i></span>
+      <span class="stat-label">Total Tonase</span>
+    </div>
+    <strong><%= format.number(summary.totalTonnage) %> ton</strong>
+    <small>Dihitung dari netto 2</small>
+  </div>
+</section>
+
 <div class="table-card">
-  <table>
+  <table id="bon-table">
     <thead>
       <tr>
         <th>Tanggal</th>
         <th>Tiket / Plat</th>
         <th>Driver</th>
-        <th>Netto</th>
-        <th>Harga</th>
+        <th style="min-width:110px">Netto 1 / 2</th>
+        <th style="min-width:70px">Harga</th>
+        <th style="min-width:100px">SPSI</th>
+        <th style="min-width:60px">PPh</th>
+        <th style="min-width:60px">U.Minum</th>
+        <th style="min-width:60px">BP</th>
         <th>Total</th>
-        <th>Status</th>
-        <th></th>
       </tr>
     </thead>
     <tbody>
       <% if (!bons.length) { %>
-        <tr><td colspan="8" class="empty">Belum ada data bon.</td></tr>
+        <tr><td colspan="10" class="empty">Belum ada data bon.</td></tr>
       <% } %>
       <% bons.forEach((bon) => { %>
-        <tr>
-          <td><%= format.date(bon.bon_date) %></td>
-          <td>
-            <div class="font-bold"><%= bon.ticket_number || '-' %></div>
-            <div class="text-xs text-slate-500"><%= bon.plate_number %></div>
+        <% const bpVal = bon.bp_colt ?? 100000; %>
+        <% const locked = bon.status === 'LUNAS'; %>
+        <tr class="bon-row<%= locked ? ' locked' : '' %>" data-id="<%= bon.id %>" data-factory-id="<%= bon.factory_id || '' %>">
+          <td class="text-xs whitespace-nowrap">
+            <div class="font-semibold text-slate-700"><%= format.date(bon.bon_date) %></div>
+            <div class="text-slate-400"><%= new Date(bon.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) %></div>
           </td>
-          <td>
-            <div><%= bon.driver_name || '-' %></div>
-            <div class="text-xs text-slate-500"><%= bon.relation_name || '' %></div>
+          <td class="whitespace-nowrap">
+            <div class="flex items-center gap-1">
+              <a href="<%= url(`/bons/${bon.id}`) %>" class="font-semibold no-underline text-inherit hover:text-indigo-600 text-sm"><%= bon.ticket_number || '-' %></a>
+              <% if (bon.image_url) { %>
+                <button class="bon-image-preview" data-url="<%= bon.image_url %>" title="Lihat foto" style="border:1px solid #e2e8f0;background:#fff;cursor:pointer;padding:0 4px;color:#94a3b8;font-size:11px;line-height:1.5;border-radius:4px">📷</button>
+              <% } %>
+            </div>
+            <div class="text-xs text-slate-500"><%= (bon.plate_number || '').replace(/\s+/g, '') %></div>
           </td>
-          <td><%= format.number(bon.netto_2) %> kg</td>
-          <td><%= format.currency(bon.price) %></td>
-          <td class="font-bold"><%= format.currency(bon.total) %></td>
-          <td><span class="status <%= bon.status.toLowerCase() %>"><%= format.statusLabel(bon.status) %></span></td>
-          <td class="text-right">
-            <a href="/bons/<%= bon.id %>" class="link">Detail</a>
+          <td class="text-xs"><%= bon.driver_name || '-' %><br><span class="text-slate-400"><%= bon.relation_agents?.name || bon.relation_name || '' %></span></td>
+          <td class="inline-edit">
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <input name="netto_1" value="<%= bon.netto_1 || 0 %>" class="bon-inline compact w-12" data-total="<%= bon.total %>" placeholder="N1" <%= locked ? 'readonly' : '' %>>
+              <input name="netto_2" value="<%= bon.netto_2 || 0 %>" class="bon-inline compact w-12" data-total="<%= bon.total %>" placeholder="N2" <%= locked ? 'readonly' : '' %>>
+            </div>
+          </td>
+          <td class="inline-edit">
+            <input name="price" value="<%= bon.price || 0 %>" class="bon-inline compact w-16" <%= locked ? 'readonly' : '' %>>
+          </td>
+          <td class="inline-edit">
+            <select name="factory_spsi_type_id" class="bon-inline compact" style="max-width:80px;font-size:10px" <%= locked ? 'disabled' : '' %>>
+              <option value="">-</option>
+              <% (factories || []).forEach((f) => { %>
+                <% if (f.id === bon.factory_id) { %>
+                  <% (f.factory_spsi_types || []).forEach((t) => { %>
+                    <option value="<%= t.id %>" <%= bon.factory_spsi_type_id === t.id ? 'selected' : '' %>><%= t.name %></option>
+                  <% }) %>
+                <% } %>
+              <% }) %>
+            </select>
+            <% if (bon.notes) { %>
+              <div class="text-xs text-slate-400 mt-1" style="max-width:80px;word-wrap:break-word;line-height:1.2"><%= bon.notes %></div>
+            <% } %>
+          </td>
+          <td class="inline-edit">
+            <input name="pph" value="<%= bon.pph || 0 %>" class="bon-inline compact w-12" <%= locked ? 'readonly' : '' %>>
+          </td>
+          <td class="inline-edit">
+            <input name="uang_minum" value="<%= bon.uang_minum || 0 %>" class="bon-inline compact w-12" <%= locked ? 'readonly' : '' %>>
+          </td>
+          <td class="inline-edit">
+            <div class="bp-group">
+              <% [0, 50000, 70000, 100000, 150000].forEach((val) => { %>
+                <span class="bp-pill sq <%= bpVal == val ? 'active' : '' %>" data-bp="<%= val %>" <%= locked ? 'style=cursor:default' : '' %>><%= val / 1000 %></span>
+              <% }); %>
+              <input type="hidden" name="bp_colt" class="bon-inline" value="<%= bpVal %>">
+            </div>
+          </td>
+          <td class="bon-total font-semibold text-sm whitespace-nowrap">
+            <div><%= format.currency(bon.total) %></div>
+            <div class="text-xs font-normal"><span class="status <%= bon.status.toLowerCase() %>"><%= bon.status === 'BELUM_DIBAYAR' ? 'Belum Nota' : bon.status === 'TERTAGIH' ? 'Belum Bayar' : 'Lunas' %></span></div>
+            <% if (!locked) { %>
+              <button class="bon-apply btn-primary small" style="display:none;margin-top:1px;font-size:9px;padding:1px 6px">Apply</button>
+            <% } %>
           </td>
         </tr>
       <% }) %>
     </tbody>
   </table>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.bon-row').forEach(row => {
+    const inputs = row.querySelectorAll('.bon-inline');
+    const applyBtn = row.querySelector('.bon-apply');
+    const totalEl = row.querySelector('.bon-total');
+    let dirty = false;
+
+    function markDirty() {
+      dirty = true;
+      if (applyBtn) applyBtn.style.display = 'inline-block';
+    }
+
+    inputs.forEach(inp => inp.addEventListener('input', markDirty));
+
+    // Recalc PPh when netto/price changes (only if PPh non-zero)
+    const ZERO_FACTORY = 'a536e3c0-7ea0-4003-9df0-c38721a9439b';
+    const pphInput = row.querySelector('[name="pph"]');
+    ['netto_1','netto_2','price'].forEach(name => {
+      const inp = row.querySelector(`[name="${name}"]`);
+      if (!inp) return;
+      inp.addEventListener('input', () => {
+        if (row.dataset.factoryId === ZERO_FACTORY) { pphInput.value = '0'; return; }
+        const cur = Number(pphInput.value) || 0;
+        if (cur !== 0) {
+          const n2 = Number(row.querySelector('[name="netto_2"]')?.value) || 0;
+          const p = Number(row.querySelector('[name="price"]')?.value) || 0;
+          pphInput.value = Math.floor(0.0025 * n2 * p);
+        }
+      });
+    });
+
+    if (applyBtn) {
+      applyBtn.addEventListener('click', async () => {
+        applyBtn.disabled = true; applyBtn.textContent = '...';
+        const id = row.dataset.id;
+        const data = {};
+        row.querySelectorAll('.bon-inline').forEach(inp => {
+          const val = inp.value.trim();
+          if (val !== '') data[inp.name] = val;
+        });
+        try {
+          const res = await fetch(window.appUrl ? window.appUrl(`/bons/${id}/quick`) : `/bons/${id}/quick`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.error || 'Gagal');
+          if (result.bon) {
+            totalEl.textContent = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(result.bon.total || 0);
+          }
+          dirty = false; applyBtn.style.display = 'none';
+        } catch (e) {
+          alert('Error: ' + e.message);
+        } finally {
+          applyBtn.disabled = false; applyBtn.textContent = 'Apply';
+        }
+      });
+    }
+  });
+
+  // Image preview modal handled by /js/image-preview.js
+});
+// BP pill click handler
+document.querySelectorAll('.bp-pill').forEach(pill => {
+  pill.addEventListener('click', function() {
+    const row = this.closest('.bon-row');
+    if (row && row.classList.contains('locked')) return;
+    const parent = this.parentNode;
+    parent.querySelectorAll('.bp-pill').forEach(p => p.classList.remove('active'));
+    this.classList.add('active');
+    const hidden = parent.querySelector('.bon-inline');
+    if (hidden) hidden.value = this.dataset.bp;
+    if (row) {
+      const applyBtn = row.querySelector('.bon-apply');
+      if (applyBtn) { applyBtn.style.display = 'inline-block'; }
+    }
+  });
+});
+</script>
+<style>
+.bon-inline.compact { font-size:12px; padding:2px 4px; border:1px solid #d1d5db; border-radius:4px; text-align:right; background:#fff; }
+.bon-inline.compact:focus { border-color:#4318FF; outline:none; box-shadow:0 0 0 2px rgba(67,24,255,0.1); }
+.inline-edit { white-space:nowrap; }
+.w-14 { width:52px; } .w-16 { width:60px; } .w-12 { width:48px; }
+.bon-row:hover .bon-inline.compact { border-color:#a5b4fc; }
+.bp-group { display:inline-flex; }
+.bp-pill.sq { font-size:9px; padding:2px 5px; cursor:pointer; color:#64748b; font-weight:500; line-height:1.3; border:1px solid #e2e8f0; border-right:none; text-align:center; min-width:18px; }
+.bp-pill.sq:first-child { border-radius:3px 0 0 3px; }
+.bp-pill.sq:last-child { border-right:1px solid #e2e8f0; border-radius:0 3px 3px 0; }
+.bp-pill.sq.active { color:#4318FF; font-weight:700; border-color:#4318FF; background:#eef2ff; }
+.bp-pill.sq.active + .bp-pill.sq { border-left-color:#4318FF; }
+.bon-row.locked { opacity:0.75; }
+.bon-row.locked input[readonly] { background:#f1f5f9; cursor:default; border-color:#e2e8f0; }
+.bon-row.locked select[disabled] { background:#f1f5f9; cursor:default; border-color:#e2e8f0; color:#94a3b8; }
+</style>
+<script src="<%= url('/js/image-preview.js') %>"></script>
+<script src="<%= url('/js/realtime.js') %>"></script>
 <%- include('../partials/footer') %>
+<script src="<%= url('/js/drop-ocr.js') %>"></script>

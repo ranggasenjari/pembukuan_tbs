@@ -11,7 +11,7 @@ class MarginRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    var query = _client.from('margins').select();
+    var query = _client.from('margins').select('*, factories(name)');
 
     if (startDate != null) {
       query = query.gte(
@@ -20,7 +20,7 @@ class MarginRepository {
       );
     }
     if (endDate != null) {
-      final nextDay = endDate.add(const Duration(days: 1));
+      final nextDay = DateTime.utc(endDate.year, endDate.month, endDate.day + 1);
       query = query.lt(
         'transaction_date',
         nextDay.toIso8601String().split('T')[0],
@@ -33,6 +33,7 @@ class MarginRepository {
 
   Future<void> createMargin({
     required DateTime transactionDate,
+    String? factoryId,
     required int offtakerAmount,
     required List<PaymentModel> selectedPayments,
   }) async {
@@ -47,6 +48,7 @@ class MarginRepository {
         .from('margins')
         .insert({
           'transaction_date': transactionDate.toIso8601String(),
+          'factory_id': factoryId,
           'offtaker_amount': offtakerAmount,
           'real_amount': realAmount,
           'margin_amount': marginAmount,
@@ -81,6 +83,7 @@ class MarginRepository {
         .from('margins')
         .update({
           'transaction_date': margin.transactionDate.toIso8601String(),
+          'factory_id': margin.factoryId,
           'offtaker_amount': margin.offtakerAmount,
           'real_amount': realAmount,
           'margin_amount': marginAmount,

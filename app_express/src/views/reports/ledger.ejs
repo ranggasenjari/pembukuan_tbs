@@ -5,55 +5,104 @@
     <h1>Buku Besar</h1>
     <p id="conn-status" class="text-sm text-slate-500">Realtime connecting...</p>
   </div>
-  <button onclick="window.print()" class="btn-secondary">Print</button>
+  <div class="flex gap-2">
+    <a href="<%= url(`/reports/ledger/pdf?start=${filters.start}&end=${filters.end}${filters.factory_id ? `&factory_id=${filters.factory_id}` : ''}`) %>" class="btn-secondary">Cetak Besar</a>
+    <form method="post" action="<%= url('/reports/harian/cetak') %>" class="inline" onsubmit="var s=document.querySelector('[name=start]'),e=document.querySelector('[name=end]'),f=document.querySelector('[name=factory_id]');if(s.value!=e.value){alert('Tanggal awal dan akhir harus sama untuk Cetak Harian.');return false}if(!f.value){alert('Pilih pabrik terlebih dahulu untuk Cetak Harian.');return false};this.querySelector('button').disabled=true">
+      <input type="hidden" name="date" value="<%= filters.start %>">
+      <% if (filters.factory_id) { %><input type="hidden" name="factory_id" value="<%= filters.factory_id %>"><% } %>
+      <button class="btn-primary">Cetak Harian</button>
+    </form>
+  </div>
 </div>
 <form class="filter-bar">
   <input type="date" name="start" value="<%= filters.start %>" class="form-input compact">
   <input type="date" name="end" value="<%= filters.end %>" class="form-input compact">
+  <select name="factory_id" class="form-input compact">
+    <option value="">Semua Pabrik</option>
+    <% (factories || []).forEach((f) => { %>
+      <option value="<%= f.id %>" <%= filters.factory_id === f.id ? 'selected' : '' %>><%= f.name %></option>
+    <% }) %>
+  </select>
   <button class="btn-secondary">Filter</button>
 </form>
 <section class="grid gap-4 md:grid-cols-4">
   <div class="stat-card"><span class="stat-label">Tonase</span><strong><%= format.number(summary.totalWeight) %> ton</strong></div>
-  <div class="stat-card"><span class="stat-label">Pembayaran</span><strong><%= format.currency(summary.totalPayment) %></strong></div>
+  <div class="stat-card">
+    <span class="stat-label">Pembayaran</span>
+    <strong><%= format.currency(summary.totalPayment) %></strong>
+    <small class="mt-1 block text-xs font-semibold text-amber-600">Total belum dibayar: <%= format.currency(summary.totalUnpaid || 0) %></small>
+  </div>
   <div class="stat-card"><span class="stat-label">Pengeluaran</span><strong><%= format.currency(summary.totalExp) %></strong></div>
   <div class="stat-card"><span class="stat-label">Net Profit</span><strong><%= format.currency(summary.totalNetProfit) %></strong></div>
 </section>
 
 <section class="mt-6 form-card">
-  <h2>Transaksi Selesai</h2>
-  <% if (!ledger.margins.length) { %><p class="empty">Belum ada margin selesai.</p><% } %>
-  <div class="space-y-4">
-    <% ledger.margins.forEach((margin) => { %>
-      <article class="rounded-lg border border-slate-200 p-4">
-        <div class="flex flex-wrap justify-between gap-3">
-          <strong><%= format.date(margin.transaction_date) %></strong>
-          <span class="font-bold text-emerald-700">Profit <%= format.currency(margin.margin_amount) %></span>
-        </div>
-        <p class="text-sm text-slate-500">Offtaker <%= format.currency(margin.offtaker_amount) %> • Real <%= format.currency(margin.real_amount) %></p>
-      </article>
-    <% }) %>
-  </div>
-</section>
-
-<section class="mt-6 form-card">
-  <h2>Masih Berjalan</h2>
-  <% if (!ledger.inProgress.length) { %><p class="empty">Tidak ada bon berjalan.</p><% } %>
+  <h2>Daftar Bon</h2>
+  <% if (!ledger.inProgress.length) { %><p class="empty">Tidak ada bon.</p><% } %>
   <div class="table-card flush">
     <table>
-      <thead><tr><th>Tanggal</th><th>Plat</th><th>Driver</th><th>Status</th><th>Total</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Tanggal</th>
+          <th>Plat</th>
+          <th>Agen/Driver</th>
+          <th>Pabrik</th>
+          <th>Netto</th>
+          <th>s/d</th>
+          <th>Harga</th>
+          <th>Total</th>
+          <th>Nota</th>
+          <th>Bayar</th>
+        </tr>
+      </thead>
       <tbody>
+        <% let cumulative = 0; %>
         <% ledger.inProgress.forEach((bon) => { %>
+          <% cumulative += Number(bon.netto_2 || 0); %>
+          <% const hasNota = bon.nota_items && bon.nota_items.length > 0; %>
+          <% const hasPayment = hasNota && bon.nota_items[0].notas?.payments?.length > 0; %>
           <tr>
             <td><%= format.date(bon.bon_date) %></td>
             <td><%= bon.plate_number %></td>
-            <td><%= bon.driver_name || '-' %></td>
-            <td><span class="status <%= bon.status.toLowerCase() %>"><%= format.statusLabel(bon.status) %></span></td>
+            <td><%= bon.driver_name || '-' %><%= bon.relation_agents?.name ? ` / ${bon.relation_agents.name}` : '' %></td>
+            <td><%= bon.factories?.name || '-' %></td>
+            <td class="text-right"><%= format.number(bon.netto_2) %> kg</td>
+            <td class="text-right font-bold"><%= format.number(cumulative) %> kg</td>
+            <td><%= format.currency(bon.price) %></td>
             <td><%= format.currency(bon.total) %></td>
+            <td class="text-center">
+              <% if (hasNota) { %>
+                <span class="print-text">TERBIT</span>
+                <span class="print-icon" style="color:#16a34a;font-size:1.1rem">&#10003;</span>
+              <% } else { %>
+                <span class="print-text">-</span>
+                <span class="print-icon" style="color:#94a3b8;font-size:1.1rem">&#10007;</span>
+              <% } %>
+            </td>
+            <td class="text-center">
+              <% if (hasPayment) { %>
+                <span class="print-text">BAYAR</span>
+                <span class="print-icon" style="color:#16a34a;font-size:1.1rem">&#10003;</span>
+              <% } else { %>
+                <span class="print-text">-</span>
+                <span class="print-icon" style="color:#94a3b8;font-size:1.1rem">&#10007;</span>
+              <% } %>
+            </td>
           </tr>
         <% }) %>
       </tbody>
     </table>
   </div>
 </section>
-<script src="/js/ledger.js"></script>
+<style>
+  @media print {
+    .print-icon { display: none; }
+    .print-text { display: inline; }
+  }
+  @media screen {
+    .print-text { display: none; }
+    .print-icon { display: inline; }
+  }
+</style>
+<script src="<%= url('/js/ledger.js') %>"></script>
 <%- include('../partials/footer') %>

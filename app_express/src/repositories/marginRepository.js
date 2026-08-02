@@ -3,13 +3,13 @@ const { toInt } = require('../services/calculations');
 const { getUnassignedPayments } = require('./paymentRepository');
 
 async function listMargins(supabase, filters = {}) {
-  let query = supabase.from('margins').select();
+  let query = supabase.from('margins').select('*, factories(name)');
   query = applyDateRange(query, 'transaction_date', filters.start, filters.end);
   return assertNoError(await query.order('transaction_date', { ascending: false }));
 }
 
 async function getMargin(supabase, id) {
-  return assertNoError(await supabase.from('margins').select().eq('id', id).single());
+  return assertNoError(await supabase.from('margins').select('*, factories(name)').eq('id', id).single());
 }
 
 async function createMargin(supabase, body, paymentIds) {
@@ -27,6 +27,7 @@ async function createMargin(supabase, body, paymentIds) {
       .from('margins')
       .insert({
         transaction_date: body.transaction_date || new Date().toISOString(),
+        factory_id: body.factory_id || null,
         offtaker_amount: offtakerAmount,
         real_amount: realAmount,
         margin_amount: offtakerAmount - realAmount
@@ -56,6 +57,7 @@ async function updateMargin(supabase, id, body, paymentIds) {
       .from('margins')
       .update({
         transaction_date: body.transaction_date || existing.transaction_date,
+        factory_id: body.factory_id || null,
         offtaker_amount: offtakerAmount,
         real_amount: realAmount,
         margin_amount: offtakerAmount - realAmount
@@ -73,7 +75,12 @@ async function deleteMargin(supabase, id) {
 }
 
 async function getMarginPayments(supabase, id) {
-  return assertNoError(await supabase.from('payments').select('*, notas(invoice_number)').eq('margin_id', id));
+  return assertNoError(
+    await supabase
+      .from('payments')
+      .select('*, notas(invoice_number, recipient_name, nota_items(bons(netto_2, price)))')
+      .eq('margin_id', id)
+  );
 }
 
 async function getMarginFormPayments(supabase, id = null) {

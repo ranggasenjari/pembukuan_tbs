@@ -5,9 +5,9 @@
     <p class="eyebrow">Margin</p>
     <h1><%= isEdit ? 'Edit Margin' : 'Input Margin' %></h1>
   </div>
-  <a href="/margins" class="btn-secondary">Kembali</a>
+  <a href="<%= url('/margins') %>" class="btn-secondary">Kembali</a>
 </div>
-<form method="post" action="<%= isEdit ? `/margins/${margin.id}?_method=PUT` : '/margins' %>" class="space-y-5">
+<form method="post" action="<%= url(isEdit ? `/margins/${margin.id}?_method=PUT` : '/margins') %>" class="space-y-5">
   <section class="form-card">
     <div class="flex items-center justify-between">
       <h2>Pilih Pembayaran</h2>
@@ -16,9 +16,18 @@
     <% if (!payments.length) { %><p class="empty">Tidak ada pembayaran yang tersedia.</p><% } %>
     <div class="mt-4 grid gap-3">
       <% payments.forEach((payment) => { const checked = selectedIds.includes(payment.id); %>
+        <% const notaBons = payment.notas?.nota_items?.flatMap((item) => item.bons ? [item.bons] : []) || []; %>
         <label class="select-row">
           <input type="checkbox" name="payment_ids" value="<%= payment.id %>" data-total="<%= payment.amount_paid %>" <%= checked ? 'checked' : '' %>>
-          <span><strong><%= payment.notas?.invoice_number || '-' %></strong><small><%= format.date(payment.payment_date) %></small></span>
+          <span>
+            <strong><%= payment.notas?.invoice_number || '-' %> · <%= payment.notas?.recipient_name || '-' %></strong>
+            <small>
+              <%= format.date(payment.payment_date) %>
+              <% notaBons.forEach((bon) => { %>
+                · <%= format.number(bon.netto_2) %> kg @ <%= format.currency(bon.price) %>
+              <% }) %>
+            </small>
+          </span>
           <b><%= format.currency(payment.amount_paid) %></b>
         </label>
       <% }) %>
@@ -27,10 +36,19 @@
   <section class="form-card max-w-2xl">
     <h2>Data Offtaker</h2>
     <label><span class="form-label">Tanggal Input</span><input type="date" name="transaction_date" value="<%= isEdit ? format.dateInput(margin.transaction_date) : today %>" class="form-input"></label>
+    <label>
+      <span class="form-label">Sumber Pembayaran Pabrik</span>
+      <select name="factory_id" class="form-input">
+        <option value="">Pilih Pabrik</option>
+        <% (factories || []).forEach((factory) => { %>
+          <option value="<%= factory.id %>" <%= margin?.factory_id === factory.id ? 'selected' : '' %>><%= factory.name %></option>
+        <% }) %>
+      </select>
+    </label>
     <label><span class="form-label">Jumlah Bayar Offtaker</span><input required type="number" name="offtaker_amount" value="<%= margin?.offtaker_amount || '' %>" class="form-input"></label>
     <p class="text-sm text-slate-500">Jumlah offtaker wajib lebih besar dari total real pembayaran terpilih.</p>
     <button class="btn-primary"><%= isEdit ? 'Update Margin' : 'Simpan Margin' %></button>
   </section>
 </form>
-<script src="/js/sum-checks.js"></script>
+<script src="<%= url('/js/sum-checks.js') %>"></script>
 <%- include('../partials/footer') %>

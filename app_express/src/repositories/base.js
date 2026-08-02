@@ -7,14 +7,21 @@ function assertNoError(result, fallbackMessage = 'Database operation failed') {
   return result.data;
 }
 
+function nextDayString(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + 1);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
 function applyDateRange(query, column, startDate, endDate) {
   let next = query;
   if (startDate) next = next.gte(column, startDate);
-  if (endDate) {
-    const end = new Date(`${endDate}T00:00:00`);
-    end.setDate(end.getDate() + 1);
-    next = next.lt(column, end.toISOString().slice(0, 10));
-  }
+  if (endDate) next = next.lt(column, nextDayString(endDate));
   return next;
 }
 

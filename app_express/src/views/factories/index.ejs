@@ -1,0 +1,7 @@
+<%- include('../partials/header') %>
+<div class="page-head"><div><p class="eyebrow">Master Data</p><h1>Pabrik</h1></div><a href="<%= url('/factories/new') %>" class="btn-primary">Tambah Pabrik</a></div>
+<div class="table-card"><table><thead><tr><th>Nama Pabrik</th><th>Alamat</th><th>Jenis SPSI</th><th>Harga</th><th></th></tr></thead><tbody>
+<% if (!factories.length) { %><tr><td colspan="5" class="empty">Belum ada data pabrik.</td></tr><% } %>
+<% factories.forEach((factory) => { %><tr><td class="font-bold"><%= factory.name %></td><td><%= factory.address || '-' %></td><td><%= (factory.factory_spsi_types || []).length %> jenis</td><td><%= (factory.factory_prices || []).length %> harga</td><td class="text-right"><a class="link" href="<%= url(`/factories/${factory.id}`) %>">Detail</a></td></tr><% }) %>
+</tbody></table></div>
+<%- include('../partials/footer') %>

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../../core/enums.dart';
 import '../../models/nota_model.dart';
 import '../../models/bon_model.dart';
 import '../../providers/providers.dart';
+import '../../services/nota_whatsapp_service.dart';
 
 class NotaDetailScreen extends ConsumerStatefulWidget {
   final NotaModel nota;
@@ -68,11 +70,43 @@ class _NotaDetailScreenState extends ConsumerState<NotaDetailScreen> {
     );
   }
 
+  Future<void> _sendWhatsapp(List<BonModel> bons) async {
+    final message = NotaWhatsappService.buildMessage(widget.nota, bons);
+    final uri = Uri.parse(
+      'https://wa.me/?text=${Uri.encodeComponent(message)}',
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      throw Exception('Tidak dapat membuka WhatsApp.');
+    }
+  }
+
   void _copyToClipboard(String value) {
     Clipboard.setData(ClipboardData(text: value));
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Nilai berhasil disalin!')));
+  }
+
+  Color _statusBackgroundColor(PaymentStatus status) {
+    switch (status) {
+      case PaymentStatus.lunas:
+        return Colors.green.shade100;
+      case PaymentStatus.tertagih:
+        return Colors.orange.shade100;
+      case PaymentStatus.belumDibayar:
+        return Colors.red.shade100;
+    }
+  }
+
+  Color _statusTextColor(PaymentStatus status) {
+    switch (status) {
+      case PaymentStatus.lunas:
+        return Colors.green.shade800;
+      case PaymentStatus.tertagih:
+        return Colors.orange.shade800;
+      case PaymentStatus.belumDibayar:
+        return Colors.red.shade800;
+    }
   }
 
   @override
@@ -172,19 +206,15 @@ class _NotaDetailScreenState extends ConsumerState<NotaDetailScreen> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: widget.nota.status == PaymentStatus.lunas
-                                  ? Colors.green.shade100
-                                  : Colors.orange.shade100,
+                              color: _statusBackgroundColor(widget.nota.status),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              widget.nota.status.label.toUpperCase(),
+                              widget.nota.status.notaLabel.toUpperCase(),
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 10,
-                                color: widget.nota.status == PaymentStatus.lunas
-                                    ? Colors.green.shade800
-                                    : Colors.orange.shade800,
+                                color: _statusTextColor(widget.nota.status),
                               ),
                             ),
                           ),
@@ -197,9 +227,12 @@ class _NotaDetailScreenState extends ConsumerState<NotaDetailScreen> {
                         'Tanggal',
                         DateFormat('dd MMM yyyy').format(widget.nota.notaDate),
                       ),
-                      if (widget.nota.recipientName != null) ...[
+                      if (widget.nota.relationAgentName != null || widget.nota.recipientName != null) ...[
                         const SizedBox(height: 12),
-                        _buildInfoRow('Kepada', widget.nota.recipientName!),
+                        _buildInfoRow(
+                          'Relasi/Agen',
+                          widget.nota.relationAgentName ?? widget.nota.recipientName!,
+                        ),
                       ],
                       if (widget.nota.recipientAddress != null) ...[
                         const SizedBox(height: 12),
@@ -359,6 +392,23 @@ class _NotaDetailScreenState extends ConsumerState<NotaDetailScreen> {
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         backgroundColor: const Color(0xFF4318FF),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _sendWhatsapp(bons),
+                      icon: const Icon(Icons.chat_outlined, size: 18),
+                      label: const Text('WA', style: TextStyle(fontSize: 10)),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),

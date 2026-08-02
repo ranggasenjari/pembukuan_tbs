@@ -9,6 +9,11 @@ import '../repositories/margin_repository.dart';
 import '../repositories/expense_repository.dart';
 import '../repositories/dashboard_repository.dart';
 import '../repositories/deposit_repository.dart';
+import '../repositories/relation_agent_repository.dart';
+import '../repositories/payment_relation_repository.dart';
+import '../repositories/factory_repository.dart';
+import '../repositories/ocr_settings_repository.dart';
+import '../services/ocr_service.dart';
 
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
   return Supabase.instance.client;
@@ -48,6 +53,34 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
 
 final depositRepositoryProvider = Provider<DepositRepository>((ref) {
   return DepositRepository(ref.watch(supabaseClientProvider));
+});
+
+final relationAgentRepositoryProvider = Provider<RelationAgentRepository>((
+  ref,
+) {
+  return RelationAgentRepository(ref.watch(supabaseClientProvider));
+});
+
+final paymentRelationRepositoryProvider = Provider<PaymentRelationRepository>((
+  ref,
+) {
+  return PaymentRelationRepository(ref.watch(supabaseClientProvider));
+});
+
+final factoryRepositoryProvider = Provider<FactoryRepository>((ref) {
+  return FactoryRepository(ref.watch(supabaseClientProvider));
+});
+
+final ocrSettingsRepositoryProvider = Provider<OcrSettingsRepository>((ref) {
+  return OcrSettingsRepository(ref.watch(supabaseClientProvider));
+});
+
+final ocrServiceProvider = Provider<OcrService>((ref) {
+  return OcrService(ref.watch(supabaseClientProvider));
+});
+
+final ocrSettingsProvider = FutureProvider.autoDispose((ref) {
+  return ref.watch(ocrSettingsRepositoryProvider).getSettings();
 });
 
 final dashboardStatsProvider = FutureProvider.autoDispose

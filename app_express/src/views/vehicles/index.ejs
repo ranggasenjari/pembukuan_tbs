@@ -1,0 +1,79 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Master Data</p>
+    <h1>Kendaraan</h1>
+  </div>
+  <a href="<%= url('/vehicles/new') %>" class="btn-primary">Tambah Kendaraan</a>
+</div>
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Plat Nomor</th>
+        <th>Driver</th>
+        <th>Relasi</th>
+        <th>Pabrik</th>
+        <th>Pot. BP</th>
+        <th>Harga</th>
+        <th>Super</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (!vehicles.length) { %>
+        <tr><td colspan="6" class="empty">Belum ada data kendaraan.</td></tr>
+      <% } %>
+      <% vehicles.forEach((v) => { %>
+        <tr>
+          <td class="font-bold"><%= v.plate_number %></td>
+          <td>
+            <% if (v.driver_list.length) { %>
+              <ul class="list-disc list-inside text-sm">
+                <% v.driver_list.forEach((d) => { %><li><%= d %></li><% }) %>
+              </ul>
+            <% } else { %>
+              <span class="text-slate-400"><%= v.driver_name || '-' %></span>
+            <% } %>
+          </td>
+          <td>
+            <% if (v.relation_list.length) { %>
+              <ul class="list-disc list-inside text-sm">
+                <% v.relation_list.forEach((r) => { %><li><%= r %></li><% }) %>
+              </ul>
+            <% } else { %>
+              <span class="text-slate-400">-</span>
+            <% } %>
+          </td>
+          <td>
+            <% if (v.factory_list.length) { %>
+              <ul class="list-disc list-inside text-sm">
+                <% v.factory_list.forEach((f) => { %><li><%= f %></li><% }) %>
+              </ul>
+            <% } else { %>
+              <span class="text-slate-400">-</span>
+            <% } %>
+          </td>
+          <td><%= format.currency(v.potongan_bp) %></td>
+          <td>
+            <% if (v.harga > 100 || v.harga < -100) { %>
+              <%= format.currency(v.harga) %>
+            <% } else if (v.harga >= -100 && v.harga <= 100 && v.harga !== 0) { %>
+              <span class="text-orange-600"><%= v.harga >= 0 ? '+' : '' %><%= v.harga %> (offset)</span>
+            <% } else { %>
+              -
+            <% } %>
+          </td>
+          <td><%= v.is_super ? '✓' : '-' %></td>
+          <td class="text-right">
+            <a href="<%= url(`/vehicles/${v.id}/edit`) %>" class="link">Edit</a>
+            <form method="post" action="<%= url(`/vehicles/${v.id}?_method=DELETE`) %>" class="inline" onsubmit="return confirm('Hapus kendaraan <%= v.plate_number %>?')">
+              <button class="link-rose">Hapus</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../partials/footer') %>

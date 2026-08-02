@@ -6,12 +6,12 @@
   </div>
   <div class="flex gap-2">
     <% if (bon.status === 'BELUM_DIBAYAR') { %>
-      <a href="/bons/<%= bon.id %>/edit" class="btn-secondary">Edit</a>
-      <form method="post" action="/bons/<%= bon.id %>?_method=DELETE" data-confirm="Hapus bon ini?">
+      <a href="<%= url(`/bons/${bon.id}/edit`) %>" class="btn-secondary">Edit</a>
+      <form method="post" action="<%= url(`/bons/${bon.id}?_method=DELETE`) %>" data-confirm="Hapus bon ini?">
         <button class="btn-danger">Hapus</button>
       </form>
     <% } %>
-    <a href="/bons" class="btn-secondary">Kembali</a>
+    <a href="<%= url('/bons') %>" class="btn-secondary">Kembali</a>
   </div>
 </div>
 
@@ -23,15 +23,29 @@
       <dt>Plat</dt><dd><%= bon.plate_number %></dd>
       <dt>Driver</dt><dd><%= bon.driver_name || '-' %></dd>
       <dt>Relasi</dt><dd><%= bon.relation_name || '-' %></dd>
+      <dt>Pabrik</dt><dd><%= bon.factories?.name || '-' %></dd>
+      <dt>Jenis SPSI</dt><dd><%= bon.spsi_type_name || (bon.factory_id ? '-' : 'Manual per kg') %></dd>
       <dt>Netto 1 / 2</dt><dd><%= format.number(bon.netto_1) %> / <%= format.number(bon.netto_2) %> kg</dd>
       <dt>Harga</dt><dd><%= format.currency(bon.price) %></dd>
-      <dt>Status</dt><dd><span class="status <%= bon.status.toLowerCase() %>"><%= format.statusLabel(bon.status) %></span></dd>
+      <dt>SPSI</dt><dd><%= format.currency(bon.spsi_amount ?? ((bon.biaya_bongkar || 0) * (bon.netto_1 || 0))) %></dd>
+      <dt>Status</dt>
+      <dd>
+        <span class="status <%= bon.status.toLowerCase() %>" title="<%= format.bonStatusDescription(bon.status) %>"><%= format.bonStatusLabel(bon.status) %></span>
+        <small class="mt-1 block text-xs text-slate-500"><%= format.bonStatusDescription(bon.status) %></small>
+      </dd>
     </dl>
   </div>
   <div class="form-card">
     <h2>Total</h2>
     <p class="text-3xl font-black text-emerald-700"><%= format.currency(bon.total) %></p>
-    <p class="mt-2 text-sm text-slate-500">Termasuk potongan lain <%= format.currency(bon.pot_lain) %></p>
+    <% const deductions = bon.bon_deductions || []; %>
+    <% if (deductions.length) { %>
+      <div class="mt-2 text-sm text-slate-500">
+        <% deductions.forEach((d) => { %>
+          <div><%= d.label || 'Potongan' %>: <%= format.currency(d.amount) %></div>
+        <% }) %>
+      </div>
+    <% } %>
     <% if (bon.image_url) { %><a href="<%= bon.image_url %>" target="_blank" class="mt-4 inline-flex btn-secondary">Lihat Foto</a><% } %>
   </div>
 </section>
@@ -43,7 +57,7 @@
   <% } %>
   <div class="grid gap-3 md:grid-cols-2">
     <% related.notas.forEach((nota) => { %>
-      <a href="/notas/<%= nota.id %>" class="rounded-lg border border-slate-200 p-4 hover:bg-slate-50">
+      <a href="<%= url(`/notas/${nota.id}`) %>" class="rounded-lg border border-slate-200 p-4 hover:bg-slate-50">
         <strong>Nota <%= nota.invoice_number %></strong>
         <div class="text-sm text-slate-500"><%= format.currency(nota.total_amount) %></div>
       </a>

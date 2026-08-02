@@ -1,0 +1,64 @@
+<%- include('../partials/header') %>
+<%
+  const item = paymentRelation || {};
+  const accounts = item.payment_relation_accounts && item.payment_relation_accounts.length
+    ? item.payment_relation_accounts
+    : [{ bank_name: '', account_number: '', account_name: '' }];
+  const selectedVehicleIds = new Set((item.payment_relation_vehicles || []).map((row) => row.vehicle_id));
+%>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Master Data</p>
+    <h1><%= paymentRelation ? 'Edit Relasi Bayar' : 'Tambah Relasi Bayar' %></h1>
+  </div>
+  <a href="<%= url(paymentRelation ? `/payment-relations/${paymentRelation.id}` : '/payment-relations') %>" class="btn-secondary">Kembali</a>
+</div>
+
+<form method="post" action="<%= url(paymentRelation ? `/payment-relations/${paymentRelation.id}?_method=PUT` : '/payment-relations') %>" class="space-y-5">
+  <section class="form-card">
+    <h2>Data Relasi Bayar</h2>
+    <div class="grid gap-4 md:grid-cols-3">
+      <label><span class="form-label">Nama Relasi Bayar</span><input required name="name" value="<%= item.name || '' %>" class="form-input uppercase"></label>
+      <label><span class="form-label">Kontak</span><input name="contact" value="<%= item.contact || '' %>" class="form-input"></label>
+      <label class="md:col-span-3"><span class="form-label">Alamat / Asal</span><input name="address" value="<%= item.address || '' %>" class="form-input uppercase"></label>
+      <label class="md:col-span-3"><span class="form-label">Catatan</span><textarea name="notes" rows="3" class="form-input"><%= item.notes || '' %></textarea></label>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <h2>Kendaraan</h2>
+    <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 mt-4">
+      <% if (!vehicles.length) { %><p class="empty md:col-span-2 lg:col-span-3">Belum ada kendaraan. Tambahkan dahulu dari modul Kendaraan.</p><% } %>
+      <% vehicles.forEach((vehicle) => { %>
+        <label class="select-row">
+          <input type="checkbox" name="vehicle_ids" value="<%= vehicle.id %>" <%= selectedVehicleIds.has(vehicle.id) ? 'checked' : '' %>>
+          <span>
+            <strong><%= vehicle.plate_number %></strong>
+            <small><%= vehicle.driver_name || '-' %></small>
+          </span>
+        </label>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Rekening</h2>
+      <button type="button" id="add-payment-relation-account" class="btn-secondary small">Tambah Rekening</button>
+    </div>
+    <div id="payment-relation-accounts" class="mt-4 space-y-3">
+      <% accounts.forEach((account) => { %>
+        <div class="payment-relation-account-row grid gap-3 md:grid-cols-[1fr_1fr_1fr_48px]">
+          <input name="bank_name" value="<%= account.bank_name || '' %>" class="form-input uppercase" placeholder="Nama Bank">
+          <input name="account_number" value="<%= account.account_number || '' %>" class="form-input" placeholder="No Rekening">
+          <input name="account_name" value="<%= account.account_name || '' %>" class="form-input uppercase" placeholder="Nama Rekening">
+          <button type="button" class="remove-payment-relation-account rounded-lg bg-rose-50 text-rose-700">x</button>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <button class="btn-primary">Simpan Relasi Bayar</button>
+</form>
+<script src="<%= url('/js/payment-relation-form.js') %>"></script>
+<%- include('../partials/footer') %>

@@ -6,14 +6,14 @@
         <div class="brand-mark login-mark">PT</div>
         <div>
           <div class="login-brand-title">Pembukuan TBS</div>
-          <div class="login-brand-subtitle">Palm oil transaction control</div>
+          <div class="login-brand-subtitle">Sistem Pembukuan TBS</div>
         </div>
       </div>
 
       <div class="login-hero-copy">
-        <p class="login-kicker">Live operations workspace</p>
+        <p class="login-kicker">Panel Operasional</p>
         <h1>Satu panel untuk timbangan, nota, pembayaran, dan margin.</h1>
-        <p>Masuk untuk mengelola alur transaksi harian dengan data Supabase yang sama seperti aplikasi Flutter.</p>
+        <p>Masuk untuk mengelola alur transaksi harian.</p>
       </div>
 
       <div class="login-dashboard-preview" aria-hidden="true">
@@ -66,16 +66,16 @@
           <div class="brand-mark small">PT</div>
           <div>
             <p>Masuk Aplikasi</p>
-            <h2>Palm Oil Inv</h2>
+            <h2>Pembukuan TBS</h2>
           </div>
         </div>
-        <p class="login-card-copy">Gunakan akun Supabase yang sudah terdaftar untuk membuka dashboard pembukuan.</p>
+        <p class="login-card-copy">Gunakan akun yang sudah terdaftar untuk membuka dashboard pembukuan.</p>
 
         <% if (flash && flash.error) { %>
           <div class="login-error"><i data-lucide="triangle-alert"></i><span><%= flash.error %></span></div>
         <% } %>
 
-        <form method="post" action="/login" class="login-form">
+        <form method="post" action="<%= url('/login') %>" class="login-form">
           <label>
             <span>Email</span>
             <div class="login-input-wrap">
@@ -98,12 +98,12 @@
 
         <div class="login-footnote">
           <span class="status-light"></span>
-          <span>Secure session dengan Supabase Auth</span>
+          <span>Sesi aman terenkripsi</span>
         </div>
       </div>
       <p class="login-copyright">Hak Cipta, Dias J Sadewo</p>
     </div>
   </div>
 </section>
-<script src="/js/login.js"></script>
+<script src="<%= url('/js/login.js') %>"></script>
 <%- include('../partials/footer') %>

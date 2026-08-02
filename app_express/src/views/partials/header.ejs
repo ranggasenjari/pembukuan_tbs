@@ -6,7 +6,11 @@
   <title><%= title ? `${title} - Pembukuan TBS` : 'Pembukuan TBS' %></title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-  <link rel="stylesheet" href="/css/app.css">
+  <script>
+    window.APP_BASE_PATH = <%- JSON.stringify(basePath || '') %>;
+    window.appUrl = (path) => `${window.APP_BASE_PATH || ''}${String(path || '/').startsWith('/') ? path : `/${path}`}`;
+  </script>
+  <link rel="stylesheet" href="<%= url('/css/app.css') %>">
 </head>
 <body class="app-body">
   <% if (typeof currentUser !== 'undefined' && currentUser) { %>
@@ -14,12 +18,11 @@
     <main class="app-main">
       <div class="app-topbar">
         <div>
-          <p class="topbar-kicker">Pembukuan TBS</p>
-          <p class="topbar-title"><%= title || 'Dashboard' %></p>
+          <button id="sidebar-toggle" class="topbar-hamburger" aria-label="Toggle sidebar">☰</button>
         </div>
         <div class="topbar-actions">
-          <a href="/bons/new" class="topbar-action"><i data-lucide="receipt-text"></i><span>Input Bon</span></a>
-          <a href="/payments/new" class="topbar-action secondary"><i data-lucide="wallet-cards"></i><span>Bayar Nota</span></a>
+          <a href="<%= url('/bons/new') %>" class="topbar-action"><i data-lucide="receipt-text"></i><span>Input Bon</span></a>
+          <a href="<%= url('/payments/new') %>" class="topbar-action secondary"><i data-lucide="wallet-cards"></i><span>Bayar Nota</span></a>
         </div>
       </div>
       <div class="content-wrap">
@@ -27,3 +30,14 @@
   <% } else { %>
     <main>
   <% } %>
+  <style>
+    .app-body.sidebar-collapsed .app-main { padding-left:0!important; }
+    .app-body.sidebar-collapsed .app-sidebar { width:0!important; overflow:hidden; padding:0; }
+    .topbar-hamburger { background:none; border:none; font-size:1.3rem; cursor:pointer; padding:4px 8px; margin-right:8px; color:#475467; display:inline-block; vertical-align:middle; }
+    .topbar-hamburger:hover { color:#111827; }
+  </style>
+  <script>
+    document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
+      document.body.classList.toggle('sidebar-collapsed');
+    });
+  </script>

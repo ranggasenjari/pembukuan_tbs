@@ -1,0 +1,669 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Operasional Terpusat <span id="realtime-status" style="font-size:10px;vertical-align:middle;margin-left:4px" title="Realtime">○</span></p>
+    <h1>Manajemen Bon</h1>
+  </div>
+  <div class="head-actions">
+    <button type="button" id="btn-select-mode" class="btn-secondary">Pilih Gabung</button>
+    <button type="button" id="btn-merge" class="btn-primary" style="display:none">Gabung Nota</button>
+    <a href="<%= url('/bons/new') %>" class="btn-primary">Tambah Bon</a>
+  </div>
+</div>
+
+<form class="filter-bar">
+  <input type="date" name="start" value="<%= filters.start || '' %>" class="form-input compact">
+  <input type="date" name="end" value="<%= filters.end || '' %>" class="form-input compact">
+  <input name="q" value="<%= filters.q || '' %>" class="form-input compact" placeholder="Tiket, driver, plat, relasi">
+  <select name="status" class="form-input compact">
+    <option value="">Semua Status</option>
+    <% ['BELUM_DIBAYAR','TERTAGIH','LUNAS'].forEach((status) => { %>
+      <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= format.bonStatusLabel(status) %></option>
+    <% }) %>
+  </select>
+  <select name="factory_id" class="form-input compact">
+    <option value="">Semua Pabrik</option>
+    <% factories.forEach((factory) => { %>
+      <option value="<%= factory.id %>" <%= filters.factory_id === factory.id ? 'selected' : '' %>><%= factory.name %></option>
+    <% }) %>
+  </select>
+  <button class="btn-secondary">Filter</button>
+</form>
+
+<section class="stats-mini">
+  <div class="stat-mini"><span>Bon</span><strong><%= format.number(summary.totalBons) %></strong></div>
+  <div class="stat-mini"><span>Belum Nota</span><strong><%= format.number(summary.unbilledBons) %></strong></div>
+  <div class="stat-mini"><span>Belum Bayar</span><strong><%= format.number(summary.billedBons) %></strong></div>
+  <div class="stat-mini"><span>Tonase</span><strong><%= format.number(summary.totalTonnage) %> t</strong></div>
+</section>
+
+<% if (!items.length) { %>
+  <section class="form-card"><p class="empty">Belum ada data bon untuk filter ini.</p></section>
+<% } %>
+
+<div class="bon-management-list">
+  <% items.forEach(({ bon, paymentRelation, nota, payments }) => { %>
+    <% const locked = bon.status === 'LUNAS'; %>
+    <% const bpVal = bon.bp_colt ?? 100000; %>
+    <% const firstPayment = (payments || [])[0]; %>
+    <% const deductions = bon.bon_deductions || []; %>
+    <article class="management-card <%= locked ? 'locked' : '' %>" data-bon-id="<%= bon.id %>" data-factory-id="<%= bon.factory_id || '' %>">
+      <section class="management-segment bon-segment">
+        <div class="segment-head">
+          <span>Bon Timbangan</span>
+          <span class="select-area">
+            <label class="merge-check" title="Pilih untuk digabung">
+              <input type="checkbox" class="merge-select" <%= locked ? 'disabled' : '' %>>
+              <span class="merge-checkmark"></span>
+            </label>
+            <span class="status <%= String(bon.status || '').toLowerCase() %>"><%= bon.status === 'BELUM_DIBAYAR' ? 'Belum Nota' : bon.status === 'TERTAGIH' ? 'Belum Bayar' : 'Lunas' %></span>
+          </span>
+        </div>
+        <div class="ticket-row">
+          <div class="flex items-center gap-1">
+            <% if (bon.image_url) { %>
+              <button class="bon-image-preview" data-url="<%= bon.image_url %>" title="Lihat foto" style="border:1px solid #e2e8f0;background:#fff;cursor:pointer;padding:0 4px;color:#94a3b8;font-size:11px;line-height:1.5;border-radius:4px">📷</button>
+            <% } %>
+            <strong><%= bon.ticket_number || '-' %></strong>
+          </div>
+          <span><%= format.date(bon.bon_date) %></span>
+        </div>
+
+        <div class="bm-row row-1">
+          <% if (locked) { %>
+            <label class="bm-field rel-locked-field"><span>Relasi</span><div class="rel-locked"><%= bon.relation_agents?.name || bon.relation_name || '-' %></div></label>
+            <label class="bm-field"><span>Plat</span><div class="rel-locked"><%= bon.plate_number %></div></label>
+            <label class="bm-field"><span>Driver</span><div class="rel-locked"><%= bon.driver_name || '-' %></div></label>
+          <% } else { %>
+            <div class="rel-cell">
+              <span>Relasi</span>
+              <div class="rel-select-wrap">
+                <select name="relation_agent_id" class="bm-input">
+                  <option value="">— Pilih Relasi —</option>
+                  <% relationAgents.forEach((agent) => { %>
+                    <option value="<%= agent.id %>" <%= bon.relation_agent_id === agent.id ? 'selected' : '' %>><%= agent.name %></option>
+                  <% }) %>
+                </select>
+                <button type="button" class="bm-add-rel" title="Tambah Relasi">+</button>
+              </div>
+            </div>
+            <label class="bm-field plat"><span>Plat</span><input name="plate_number" value="<%= bon.plate_number || '' %>" class="bm-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+            <label class="bm-field driver"><span>Driver</span><input name="driver_name" value="<%= bon.driver_name || '' %>" class="bm-input uppercase" <%= locked ? 'readonly' : '' %>></label>
+          <% } %>
+        </div>
+
+        <% if (!locked) { %>
+          <div class="rel-add-form" style="display:none">
+            <input required name="new_relation_name" class="bm-input uppercase" placeholder="Nama Relasi">
+            <input name="new_relation_address" class="bm-input uppercase" placeholder="Alamat (opsional)">
+          </div>
+        <% } %>
+
+        <div class="bm-row row-2">
+          <label class="bm-field n1"><span>N1</span><input name="netto_1" value="<%= bon.netto_1 || 0 %>" class="bm-input number" <%= locked ? 'readonly' : '' %>></label>
+          <label class="bm-field n2"><span>N2</span><input name="netto_2" value="<%= bon.netto_2 || 0 %>" class="bm-input number" <%= locked ? 'readonly' : '' %>></label>
+          <label class="bm-field harga"><span>Harga</span><input name="price" value="<%= bon.price || 0 %>" class="bm-input number" <%= locked ? 'readonly' : '' %>></label>
+          <label class="bm-field spsi"><span>SPSI</span>
+            <select name="factory_spsi_type_id" class="bm-input" <%= locked ? 'disabled' : '' %>>
+              <option value="">-</option>
+              <% factories.forEach((factory) => { %>
+                <% if (factory.id === bon.factory_id) { %>
+                  <% (factory.factory_spsi_types || []).forEach((type) => { %>
+                    <option value="<%= type.id %>" data-mode="<%= type.calculation_mode || 'PER_KG' %>" data-rate="<%= type.amount || 0 %>" <%= bon.factory_spsi_type_id === type.id ? 'selected' : '' %>><%= type.name %></option>
+                  <% }) %>
+                <% } %>
+              <% }) %>
+            </select>
+          </label>
+          <label class="bm-field uminum"><span>U.Minum</span><input name="uang_minum" value="<%= bon.uang_minum || 0 %>" class="bm-input number" <%= locked ? 'readonly' : '' %>></label>
+        </div>
+
+        <div class="bm-row row-3">
+          <label class="bm-field dp"><span>DP</span><input name="dp" value="<%= bon.dp || 0 %>" class="bm-input number" <%= locked ? 'readonly' : '' %>></label>
+          <div class="bm-field bp-field">
+            <span>BP</span>
+            <div class="bp-pills-inline">
+              <% [0, 50000, 70000, 100000, 150000].forEach((val) => { %>
+                <button type="button" class="bm-bp <%= bpVal == val ? 'active' : '' %>" data-value="<%= val %>" <%= locked ? 'disabled' : '' %>><%= val / 1000 %></button>
+              <% }) %>
+              <input type="hidden" name="bp_colt" value="<%= bpVal %>" class="bm-input">
+            </div>
+          </div>
+          <label class="bm-field pph-field">
+            <span>PPh</span>
+            <button type="button" class="bm-pph <%= bon.pph > 0 ? 'active' : '' %>" data-enabled="<%= bon.pph > 0 ? '1' : '0' %>" <%= locked ? 'disabled' : '' %>><%= bon.pph > 0 ? 'ON' : 'OFF' %></button>
+          </label>
+          <label class="bm-field notes-field"><span>Catatan</span><input name="notes" value="<%= bon.notes || '' %>" class="bm-input" <%= locked ? 'readonly' : '' %> placeholder="Ringkas"></label>
+        </div>
+
+        <div class="bm-field ded-field">
+          <span>Potongan Lain</span>
+          <% if (locked) { %>
+            <% if (deductions.length) { %>
+              <div class="mini-list">
+                <% deductions.forEach((d) => { %>
+                  <div><strong><%= d.label || 'Potongan' %></strong> <%= format.currency(d.amount) %></div>
+                <% }) %>
+              </div>
+            <% } else { %>
+              <div class="muted-line">-</div>
+            <% } %>
+          <% } else { %>
+            <div class="ded-list">
+              <% if (deductions.length) { %>
+                <% deductions.forEach((d, i) => { %>
+                  <div class="ded-row">
+                    <input name="deduction_label" value="<%= d.label || '' %>" class="bm-input" placeholder="Label">
+                    <input name="deduction_amount" value="<%= d.amount || 0 %>" class="bm-input number" placeholder="Rp">
+                    <button type="button" class="ded-remove" title="Hapus">&times;</button>
+                    <button type="button" class="ded-add" title="Tambah Potongan">+</button>
+                  </div>
+                <% }) %>
+              <% } else { %>
+                <div class="ded-row">
+                  <input name="deduction_label" value="" class="bm-input" placeholder="Label">
+                  <input name="deduction_amount" value="" class="bm-input number" placeholder="Rp">
+                  <button type="button" class="ded-remove" title="Hapus">&times;</button>
+                  <button type="button" class="ded-add" title="Tambah Potongan">+</button>
+                </div>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+
+        <div class="total-row">
+          <span>Total</span>
+          <strong class="bon-total"><%= format.currency(bon.total) %></strong>
+          <% if (!locked) { %><button type="button" class="btn-primary small bm-save" style="display:none">Simpan Bon</button><% } %>
+        </div>
+      </section>
+
+      <section class="management-segment relation-segment">
+        <div class="segment-head">
+          <span>Relasi Bayar</span>
+          <i data-lucide="hand-coins"></i>
+        </div>
+        <% if (paymentRelation) { %>
+          <div class="segment-title"><%= paymentRelation.name %></div>
+          <div class="muted-line"><%= paymentRelation.contact || '-' %></div>
+          <div class="muted-line"><%= paymentRelation.address || '-' %></div>
+          <% const accounts = paymentRelation.payment_relation_accounts || []; %>
+          <% if (accounts.length) { %>
+            <div class="mini-list">
+              <% accounts.forEach((account) => { %>
+                <div><strong><%= account.bank_name || '-' %></strong> <%= account.account_number || '-' %><br><small><%= account.account_name || '-' %></small></div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <p class="muted-line">Belum ada rekening.</p>
+          <% } %>
+        <% } else { %>
+          <p class="muted-line">Belum ada relasi bayar terhubung ke plat ini.</p>
+        <% } %>
+        <% if (!locked) { %>
+          <div class="payment-block">
+            <div class="sub-head">Hubungkan Relasi Bayar</div>
+            <form method="post" action="<%= url(`/bon-management/bons/${bon.id}/payment-relation`) %>" class="inline-stack">
+              <select required name="payment_relation_id" class="bm-input">
+                <option value="">Pilih Relasi Bayar</option>
+                <% paymentRelations.forEach((relation) => { %>
+                  <option value="<%= relation.id %>"><%= relation.name %></option>
+                <% }) %>
+              </select>
+              <button class="btn-secondary small">Hubungkan Plat</button>
+            </form>
+            <details class="inline-create">
+              <summary>Tambah Relasi Bayar Baru</summary>
+              <form method="post" action="<%= url(`/bon-management/bons/${bon.id}/payment-relation/new`) %>" class="inline-stack">
+                <div class="pr-half">
+                  <input required name="name" class="bm-input uppercase" placeholder="Nama Relasi Bayar">
+                  <input name="contact" class="bm-input" placeholder="Kontak">
+                </div>
+                <input name="address" class="bm-input uppercase" placeholder="Alamat / Asal">
+                <textarea name="notes" rows="2" class="bm-input" placeholder="Catatan"></textarea>
+                <div class="pr-third">
+                  <input name="bank_name" class="bm-input uppercase" placeholder="Nama Bank">
+                  <input name="account_number" class="bm-input" placeholder="No Rekening">
+                  <input name="account_name" class="bm-input uppercase" placeholder="Nama Rekening">
+                </div>
+                <button class="btn-primary small">Simpan & Hubungkan</button>
+              </form>
+            </details>
+          </div>
+        <% } %>
+      </section>
+
+      <section class="management-segment nota-segment" data-nota-id="<%= nota?.id || '' %>">
+        <div class="segment-head">
+          <span>Nota & Pembayaran</span>
+          <i data-lucide="file-text"></i>
+        </div>
+        <% if (nota) { %>
+          <div class="segment-title"><%= nota.invoice_number %></div>
+          <div class="muted-line"><%= format.currency(nota.total_amount) %></div>
+          <span class="status <%= String(nota.status || '').toLowerCase() %>"><%= format.notaStatusLabel(nota.status) %></span>
+          <div class="action-row">
+            <button type="button" class="btn-secondary small bm-recalc">Recalc</button>
+            <button type="button" class="btn-secondary small bm-wa">WA</button>
+          </div>
+        <% } else { %>
+          <p class="muted-line">Bon belum masuk nota.</p>
+          <form method="post" action="<%= url(`/bon-management/bons/${bon.id}/nota`) %>">
+            <button class="btn-primary small" <%= bon.status !== 'BELUM_DIBAYAR' ? 'disabled' : '' %>>Buat Nota</button>
+          </form>
+        <% } %>
+
+        <div class="payment-block">
+          <div class="sub-head">Pembayaran</div>
+          <% if (firstPayment) { %>
+            <div class="segment-title"><%= format.currency(firstPayment.amount_paid) %></div>
+            <div class="muted-line"><%= format.date(firstPayment.payment_date) %></div>
+            <% if (firstPayment.proof_url) { %><a class="link" href="<%= firstPayment.proof_url %>" target="_blank">Lihat Bukti</a><% } %>
+          <% } else if (nota) { %>
+            <form method="post" enctype="multipart/form-data" action="<%= url(`/bon-management/notas/${nota.id}/payments`) %>" class="inline-stack">
+              <div class="pay-row">
+                <input required type="date" name="payment_date" value="<%= today %>" class="bm-input">
+                <input required type="number" name="amount_paid" value="<%= nota.total_amount || bon.total || '' %>" class="bm-input number" placeholder="Nominal">
+              </div>
+              <input required type="file" name="proof" accept="image/*" class="bm-input file">
+              <button class="btn-primary small">Simpan Bayar</button>
+            </form>
+          <% } else { %>
+            <p class="muted-line">Buat nota dulu sebelum input pembayaran.</p>
+          <% } %>
+        </div>
+      </section>
+    </article>
+  <% }) %>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const appUrl = window.appUrl || ((path) => path);
+  const money = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
+
+  const selectModeBtn = document.getElementById('btn-select-mode');
+  const mergeBtn = document.getElementById('btn-merge');
+  let selectMode = false;
+
+  const updateMergeState = () => {
+    const selected = Array.from(document.querySelectorAll('.merge-select:checked')).map((box) => box.closest('.management-card').dataset.bonId);
+    const any = selected.length > 0;
+    document.querySelectorAll('.management-card').forEach((card) => {
+      const box = card.querySelector('.merge-select');
+      if (!box) return;
+      if (selectMode) card.classList.toggle('selectable', !box.disabled);
+      card.classList.toggle('selected', !box.disabled && box.checked);
+    });
+    if (mergeBtn) {
+      mergeBtn.style.display = any ? 'inline-flex' : 'none';
+      mergeBtn.textContent = `Gabung Nota (${selected.length})`;
+    }
+    if (selectModeBtn) selectModeBtn.classList.toggle('active', selectMode);
+  };
+
+  if (selectModeBtn) selectModeBtn.addEventListener('click', () => {
+    selectMode = !selectMode;
+    document.querySelectorAll('.merge-select:checked').forEach((box) => { box.checked = false; });
+    updateMergeState();
+  });
+
+  document.querySelectorAll('.merge-select').forEach((box) => {
+    box.addEventListener('change', updateMergeState);
+  });
+
+  document.querySelectorAll('.management-card').forEach((card) => {
+    const box = card.querySelector('.merge-select');
+    if (!box || box.disabled) return;
+
+    const MOVE_TOLERANCE = 10;
+    let pressTimer = null;
+    let pressing = false;
+    let pressMoved = false;
+    let justActivated = false;
+    let pressStartX = 0;
+    let pressStartY = 0;
+
+    const startPress = (event) => {
+      if (event.button !== 0) return;
+      pressing = true;
+      pressMoved = false;
+      justActivated = false;
+      pressStartX = event.clientX;
+      pressStartY = event.clientY;
+      if (!selectMode) {
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+          if (pressMoved || box.disabled) return;
+          selectMode = true;
+          justActivated = true;
+          box.checked = true;
+          updateMergeState();
+        }, 450);
+      }
+    };
+
+    const handleMove = (event) => {
+      if (!pressing) return;
+      if (Math.abs(event.clientX - pressStartX) > MOVE_TOLERANCE ||
+          Math.abs(event.clientY - pressStartY) > MOVE_TOLERANCE) {
+        pressMoved = true;
+        clearTimeout(pressTimer);
+      }
+    };
+
+    const endPress = (event) => {
+      const wasMoved = pressMoved;
+      const wasJustActivated = justActivated;
+      clearTimeout(pressTimer);
+      pressing = false;
+      pressMoved = false;
+      justActivated = false;
+      if (selectMode && !wasMoved && !wasJustActivated && !box.disabled) {
+        if (!event.target.closest('.merge-check')) {
+          box.checked = !box.checked;
+          updateMergeState();
+        }
+      }
+    };
+
+    const cancelPress = () => {
+      clearTimeout(pressTimer);
+      pressing = false;
+      pressMoved = false;
+      justActivated = false;
+    };
+
+    card.addEventListener('pointerdown', startPress);
+    card.addEventListener('pointermove', handleMove);
+    card.addEventListener('pointerup', endPress);
+    card.addEventListener('pointercancel', cancelPress);
+    card.addEventListener('pointerleave', cancelPress);
+    card.querySelector('.merge-check').addEventListener('click', (event) => event.stopPropagation());
+  });
+
+  if (mergeBtn) mergeBtn.addEventListener('click', async () => {
+    const selected = Array.from(document.querySelectorAll('.merge-select:checked')).map((box) => box.closest('.management-card').dataset.bonId);
+    if (selected.length < 2) return;
+    const payload = { bon_ids: selected };
+    try {
+      const response = await fetch(appUrl('/notas/merge'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        const message = result.error || 'Gagal menggabung bon';
+        if (/relasi/i.test(message) && !payload.relation_agent_id) {
+          const agentId = prompt(`${message}\nPilih ID relasi (kosongkan bila ingin lanjut):`);
+          if (!agentId) return;
+          payload.relation_agent_id = agentId;
+          return mergeBtn.click();
+        }
+        throw new Error(message);
+      }
+      window.location.href = appUrl(`/notas/${result.nota.id}`);
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  document.querySelectorAll('.management-card').forEach((card) => {
+    const saveButton = card.querySelector('.bm-save');
+    const ZERO_FACTORY = 'a536e3c0-7ea0-4003-9df0-c38721a9439b';
+
+    const recalcTotal = () => {
+      const n1 = Number(card.querySelector('[name="netto_1"]')?.value) || 0;
+      const n2 = Number(card.querySelector('[name="netto_2"]')?.value) || 0;
+      const price = Number(card.querySelector('[name="price"]')?.value) || 0;
+      const dp = Number(card.querySelector('[name="dp"]')?.value) || 0;
+      const um = Number(card.querySelector('[name="uang_minum"]')?.value) || 0;
+      const bp = Number(card.querySelector('[name="bp_colt"]')?.value) || 0;
+
+      const spsiSelect = card.querySelector('[name="factory_spsi_type_id"]');
+      const spsiOption = spsiSelect?.options[spsiSelect.selectedIndex];
+      const spsiMode = String(spsiOption?.dataset.mode || 'PER_KG').toUpperCase();
+      const spsiRate = Number(spsiOption?.dataset.rate) || 0;
+      const spsiAmount = spsiMode === 'FIX' ? spsiRate : spsiRate * n1;
+
+      const zero = card.dataset.factoryId === ZERO_FACTORY;
+      const pphBtn = card.querySelector('.bm-pph');
+      const pphOn = pphBtn && !pphBtn.disabled && pphBtn.dataset.enabled === '1';
+      const pph = zero ? 0 : (pphOn ? Math.floor(0.0025 * price * n2) : 0);
+      const umValue = zero ? 0 : um;
+
+      let deductionTotal = 0;
+      card.querySelectorAll('[name="deduction_amount"]').forEach((inp) => { deductionTotal += Number(inp.value) || 0; });
+
+      const total = (price * n2) - (dp + spsiAmount + bp + pph + umValue + deductionTotal);
+      const totalEl = card.querySelector('.bon-total');
+      if (totalEl) totalEl.textContent = money(total);
+    };
+
+    const inputs = card.querySelectorAll('.bon-segment .bm-input');
+    inputs.forEach((input) => {
+      input.addEventListener('input', () => {
+        if (saveButton) saveButton.style.display = 'inline-flex';
+        if (input.classList.contains('uppercase')) input.value = input.value.toUpperCase();
+        recalcTotal();
+      });
+      input.addEventListener('change', () => {
+        if (saveButton) saveButton.style.display = 'inline-flex';
+        recalcTotal();
+      });
+    });
+
+    card.querySelectorAll('.bm-bp').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.disabled) return;
+        card.querySelectorAll('.bm-bp').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        card.querySelector('[name="bp_colt"]').value = button.dataset.value;
+        if (saveButton) saveButton.style.display = 'inline-flex';
+        recalcTotal();
+      });
+    });
+
+    card.querySelectorAll('.bm-pph').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.disabled) return;
+        const on = button.dataset.enabled !== '1';
+        button.dataset.enabled = on ? '1' : '0';
+        button.textContent = on ? 'ON' : 'OFF';
+        button.classList.toggle('active', on);
+        if (saveButton) saveButton.style.display = 'inline-flex';
+        recalcTotal();
+      });
+    });
+
+    const addRelBtn = card.querySelector('.bm-add-rel');
+    if (addRelBtn) {
+      addRelBtn.addEventListener('click', () => {
+        const form = card.querySelector('.rel-add-form');
+        if (form) form.style.display = form.style.display === 'none' ? 'grid' : 'none';
+      });
+    }
+
+    const dedList = card.querySelector('.ded-list');
+    const addDed = () => {
+      const row = document.createElement('div');
+      row.className = 'ded-row';
+      row.innerHTML = '<input name="deduction_label" value="" class="bm-input" placeholder="Label"><input name="deduction_amount" value="" class="bm-input number" placeholder="Rp"><button type="button" class="ded-remove" title="Hapus">&times;</button><button type="button" class="ded-add" title="Tambah Potongan">+</button>';
+      row.querySelector('.ded-remove').addEventListener('click', () => { row.remove(); if (saveButton) saveButton.style.display = 'inline-flex'; recalcTotal(); });
+      row.querySelector('.ded-add').addEventListener('click', addDed);
+      row.querySelectorAll('input').forEach((inp) => inp.addEventListener('input', () => { if (saveButton) saveButton.style.display = 'inline-flex'; recalcTotal(); }));
+      if (dedList) { dedList.appendChild(row); if (saveButton) saveButton.style.display = 'inline-flex'; recalcTotal(); }
+    };
+    card.querySelectorAll('.ded-add').forEach((btn) => btn.addEventListener('click', addDed));
+    card.querySelectorAll('.ded-remove').forEach((btn) => btn.addEventListener('click', () => { btn.closest('.ded-row').remove(); if (saveButton) saveButton.style.display = 'inline-flex'; recalcTotal(); }));
+
+    if (saveButton) {
+      saveButton.addEventListener('click', async () => {
+        const data = {};
+        card.querySelectorAll('.bon-segment .bm-input').forEach((input) => {
+          if (input.name && input.value !== '' && !input.classList.contains('file')) data[input.name] = input.value;
+        });
+        const pphBtn = card.querySelector('.bm-pph');
+        if (pphBtn && !pphBtn.disabled) data.pph_enabled = pphBtn.dataset.enabled;
+        // Relasi Agen: jika pilih existing → kirim id; jika isi nama baru → buat relasi baru
+        const relSelect = card.querySelector('[name="relation_agent_id"]');
+        const newRelName = card.querySelector('[name="new_relation_name"]')?.value?.trim();
+        if (relSelect && !relSelect.disabled) {
+          data.relation_agent_id = relSelect.value || '';
+          if (newRelName) {
+            data.new_relation_name = newRelName;
+            data.new_relation_address = card.querySelector('[name="new_relation_address"]')?.value || '';
+          }
+        }
+        saveButton.disabled = true;
+        saveButton.textContent = 'Menyimpan...';
+        try {
+          const response = await fetch(appUrl(`/bon-management/bons/${card.dataset.bonId}`), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(data)
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok) throw new Error(result.error || 'Gagal menyimpan bon');
+          card.querySelector('.bon-total').textContent = money(result.bon.total);
+          saveButton.style.display = 'none';
+          location.reload();
+        } catch (error) {
+          alert(error.message);
+        } finally {
+          saveButton.disabled = false;
+          saveButton.textContent = 'Simpan Bon';
+        }
+      });
+    }
+  });
+
+  document.querySelectorAll('.bm-recalc').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const segment = button.closest('.nota-segment');
+      button.disabled = true;
+      button.textContent = '...';
+      try {
+        const response = await fetch(appUrl(`/bon-management/notas/${segment.dataset.notaId}/recalc`), {
+          method: 'POST',
+          headers: { Accept: 'application/json' }
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Gagal recalc');
+        location.reload();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Recalc';
+      }
+    });
+  });
+
+  document.querySelectorAll('.bm-wa').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const segment = button.closest('.nota-segment');
+      try {
+        const response = await fetch(appUrl(`/bon-management/notas/${segment.dataset.notaId}/whatsapp`), {
+          headers: { Accept: 'application/json' }
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Gagal membuat teks WA');
+        await navigator.clipboard.writeText(result.text);
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'WA'; }, 1200);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  });
+});
+</script>
+
+<style>
+.stats-mini { display:grid; gap:8px; grid-template-columns:repeat(4,1fr); margin-bottom:14px; }
+.stat-mini { align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); display:flex; justify-content:space-between; padding:8px 12px; }
+.stat-mini span { color:var(--muted); font-size:.7rem; font-weight:900; letter-spacing:.04em; text-transform:uppercase; }
+.stat-mini strong { color:var(--text); font-size:1.05rem; font-weight:950; }
+.bon-management-list { display:grid; gap:16px; }
+.management-card { background:var(--surface); border:1px solid #d8dce3; border-radius:14px; box-shadow:0 6px 18px rgb(16 24 40 / .08), 0 1px 3px rgb(16 24 40 / .06); display:grid; gap:0; grid-template-columns:minmax(340px,1.45fr) minmax(200px,.9fr) minmax(210px,.9fr); overflow:hidden; position:relative; }
+.management-card.selectable { cursor:pointer; }
+.management-card.selected { box-shadow:0 0 0 2px var(--primary), 0 10px 26px rgb(15 118 110 / .22); }
+.management-card.selectable:hover { box-shadow:0 0 0 2px rgb(15 118 110 / .35); }
+.select-area { align-items:center; display:flex; gap:6px; }
+.merge-check { cursor:pointer; display:inline-flex; }
+.merge-check input { display:none; }
+.merge-checkmark { border:1.5px solid #cbd5e1; border-radius:4px; display:inline-block; height:14px; position:relative; width:14px; }
+.merge-check input:checked + .merge-checkmark { background:var(--primary); border-color:var(--primary); }
+.merge-check input:checked + .merge-checkmark::after { border:solid #fff; border-width:0 2px 2px 0; content:''; height:8px; left:4px; position:absolute; top:1px; transform:rotate(45deg); width:4px; }
+.merge-check input:disabled + .merge-checkmark { background:#f1f5f9; opacity:.4; }
+.head-actions { align-items:center; display:flex; gap:6px; }
+.btn-secondary.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+.management-card::before { background:linear-gradient(90deg, var(--primary), #14b8a6); content:''; height:4px; left:0; position:absolute; right:0; top:0; }
+.management-card.locked { opacity:.85; }
+.management-card.locked::before { background:linear-gradient(90deg, #94a3b8, #cbd5e1); }
+.management-card:hover { box-shadow:0 10px 26px rgb(16 24 40 / .12), 0 2px 6px rgb(16 24 40 / .08); }
+.management-segment { border-right:1px solid var(--line); padding:10px 12px; min-width:0; }
+.management-segment:last-child { border-right:0; }
+.segment-head { align-items:center; color:var(--muted); display:flex; font-size:.64rem; font-weight:900; justify-content:space-between; letter-spacing:.05em; margin-bottom:8px; text-transform:uppercase; }
+.segment-head svg { height:14px; width:14px; }
+.segment-title { color:var(--text); font-weight:950; line-height:1.2; margin-bottom:4px; }
+.muted-line { color:var(--muted); font-size:.74rem; line-height:1.35; }
+.sub-head { color:var(--muted); font-size:.62rem; font-weight:900; letter-spacing:.05em; margin-bottom:4px; text-transform:uppercase; }
+.payment-block { border-top:1px solid var(--line); margin-top:10px; padding-top:8px; }
+.mini-list { display:grid; gap:4px; margin-top:8px; }
+.mini-list div { background:var(--surface-soft); border:1px solid var(--line); border-radius:6px; font-size:.72rem; line-height:1.25; padding:6px 8px; }
+.mini-list small { color:var(--muted); }
+.inline-stack { display:grid; gap:6px; }
+.pay-row { display:grid; gap:5px; grid-template-columns:1fr 1fr; }
+.pr-half { display:grid; gap:5px; grid-template-columns:1fr 1fr; }
+.pr-third { display:grid; gap:5px; grid-template-columns:1fr 1fr 1fr; }
+.inline-create { margin-top:6px; }
+.inline-create summary { color:var(--primary); cursor:pointer; font-size:.74rem; font-weight:850; }
+.ticket-row, .total-row, .bp-row, .action-row { align-items:center; display:flex; gap:6px; justify-content:space-between; }
+.ticket-row { margin-bottom:8px; }
+.ticket-row span { color:var(--muted); font-size:.74rem; }
+.bm-row { display:grid; gap:5px; grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:8px; }
+.bm-row.row-1 { grid-template-columns:2fr 1.2fr 1fr; }
+.bm-row.row-2 { grid-template-columns:0.9fr 0.9fr 1fr 1.2fr 1fr; }
+.bm-row.row-3 { grid-template-columns: 1.5fr 0.5fr 0.4fr 1.9fr; }
+.bm-field { display:grid; gap:2px; }
+.bm-field > span, .rel-cell > span { color:var(--muted); font-size:.6rem; font-weight:900; text-transform:uppercase; }
+.bm-row .bm-field, .rel-cell { margin-top:0; }
+.rel-cell { display:grid; gap:2px; }
+.rel-select-wrap { align-items:end; display:flex; gap:3px; }
+.rel-select-wrap .bm-input { flex:1; }
+.bm-add-rel { background:var(--primary-soft); border:1px solid var(--primary); border-radius:5px; color:var(--primary-strong); cursor:pointer; font-size:1rem; font-weight:900; height:24px; line-height:1; min-width:24px; padding:0; }
+.bm-add-rel:hover { background:var(--primary); color:#fff; }
+.rel-locked { background:#f1f5f9; border:1px solid #e2e8f0; border-radius:5px; color:#64748b; font-size:.74rem; min-height:24px; padding:3px 6px; }
+.rel-add-form { display:grid; gap:5px; grid-template-columns:1fr 1fr; margin-top:5px; }
+.bm-input { background:#fff; border:1px solid #d0d5dd; border-radius:5px; color:var(--text); font-size:.72rem; min-height:24px; padding:2px 5px; width:100%; }
+.bm-input.number { text-align:right; }
+.bm-input:focus { border-color:var(--primary); box-shadow:0 0 0 2px rgb(15 118 110 / .1); outline:none; }
+.bm-input[readonly], .bm-input:disabled { background:#f1f5f9; color:#64748b; }
+.bm-input.file { padding:1px 4px; }
+.bp-pills-inline { align-items:center; display:flex; gap:3px; }
+.bm-bp { border:1px solid var(--line); color:#64748b; font-size:.64rem; font-weight:850; min-height:24px; min-width:28px; padding:0 4px; }
+.bm-bp.active { background:var(--primary-soft); border-color:var(--primary); color:var(--primary-strong); }
+.bm-pph { border:1px solid var(--line); color:#64748b; font-size:.6rem; font-weight:900; height:24px; letter-spacing:.04em; min-width:42px; padding:0 6px; }
+.bm-pph.active { background:var(--primary-soft); border-color:var(--primary); color:var(--primary-strong); }
+.bp-field, .pph-field { align-content:start; }
+.notes-field { margin-top:8px; }
+.ded-field { margin-top:8px; }
+.ded-list { display:grid; gap:4px; }
+.ded-row { align-items:center; display:grid; gap:4px; grid-template-columns:1fr 1fr 22px 22px; }
+.ded-remove, .ded-add { background:var(--surface-soft); border:1px solid var(--line); border-radius:4px; cursor:pointer; font-size:.8rem; font-weight:900; height:24px; line-height:1; padding:0; width:22px; }
+.ded-remove { color:var(--danger, #e11d48); }
+.ded-add { color:var(--primary-strong); }
+.total-row { border-top:1px solid var(--line); margin-top:8px; padding-top:8px; }
+.total-row strong { font-size:.85rem; }
+.btn-primary.small, .btn-secondary.small { font-size:.7rem; min-height:24px; padding:.15rem .5rem; width:auto; }
+.action-row { justify-content:flex-start; margin-top:8px; }
+@media (max-width: 1180px) { .management-card { grid-template-columns:1fr 1fr; } .management-segment:nth-child(2) { border-right:0; } .management-segment:nth-child(-n+2) { border-bottom:1px solid var(--line); } }
+@media (max-width: 760px) { .management-card { grid-template-columns:1fr; } .management-segment { border-bottom:1px solid var(--line); border-right:0; } .management-segment:last-child { border-bottom:0; } .compact-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .stats-mini { grid-template-columns:1fr 1fr; } }
+</style>
+
+<script src="<%= url('/js/image-preview.js') %>"></script>
+<script src="<%= url('/js/realtime.js') %>"></script>
+<%- include('../partials/footer') %>

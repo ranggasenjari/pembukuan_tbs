@@ -8,8 +8,13 @@ const ledgerRepository = require('../repositories/ledgerRepository');
 const router = express.Router();
 
 router.post('/ocr/bon', upload.single('file'), asyncHandler(async (req, res) => {
-  const data = await processBonOcr(req.file);
-  res.json({ data });
+  if (!req.file) return res.status(400).json({ error: 'File gambar wajib diupload.' });
+  const ocrResult = await processBonOcr(req.file, { supabase: req.supabase });
+  if (!ocrResult.image_url && ocrResult.image_path) {
+    const { data: urlData } = req.supabase.storage.from('receipts').getPublicUrl(ocrResult.image_path);
+    ocrResult.image_url = urlData?.publicUrl || null;
+  }
+  res.json(ocrResult);
 }));
 
 router.get('/events', (req, res) => attachClient(req, res));

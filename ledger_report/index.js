@@ -85,7 +85,11 @@ const setupRealtime = () => {
     // Create a new channel for database changes
     const channel = supabase.channel('realtime_db_changes');
 
-    const tables = ['bons', 'notas', 'payments', 'margins', 'expenses', 'expense_margins', 'nota_items'];
+    const tables = [
+        'bons', 'notas', 'payments', 'margins', 'expenses', 'expense_margins', 'nota_items',
+        'bon_deductions', 'factories', 'relation_agents', 'relation_agent_transports',
+        'relation_agent_accounts', 'relation_agent_drivers', 'factory_prices', 'factory_spsi_types'
+    ];
 
     tables.forEach(table => {
         console.log(`[Realtime] Subscribing to table: ${schema}.${table}`);
@@ -139,23 +143,40 @@ app.get('/api/summary', async (req, res) => {
     try {
         const sinceDate = req.query.since || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
 
-        const [expenses, bons, payments, margins] = await Promise.all([
+        const [expenses, bons, payments, margins, unpaidNotas] = await Promise.all([
             supabase.from('expenses').select('amount').gte('expense_date', sinceDate),
-            supabase.from('bons').select('netto_1, netto_2').gte('bon_date', sinceDate),
+            supabase.from('bons').select('netto_1, netto_2, factories(name)').gte('bon_date', sinceDate),
             supabase.from('payments').select('amount_paid').gte('payment_date', sinceDate),
-            supabase.from('margins').select('margin_amount').gte('transaction_date', sinceDate)
+            supabase.from('margins').select('margin_amount').gte('transaction_date', sinceDate),
+            supabase
+                .from('notas')
+                .select('total_amount, payments(proof_url)')
+                .eq('status', 'TERTAGIH')
+                .gte('invoice_date', sinceDate)
         ]);
 
         const totalWeight = (bons.data || []).reduce((sum, b) => sum + (Number(b.netto_2) || Number(b.netto_1)), 0) / 1000;
         const totalPayment = (payments.data || []).reduce((sum, p) => sum + Number(p.amount_paid), 0);
         const totalExp = (expenses.data || []).reduce((sum, e) => sum + Number(e.amount), 0);
         const totalMargin = (margins.data || []).reduce((sum, m) => sum + Number(m.margin_amount), 0);
+        const totalUnpaid = (unpaidNotas.data || [])
+            .filter(nota => !(nota.payments || []).some(payment => payment.proof_url))
+            .reduce((sum, nota) => sum + Number(nota.total_amount || 0), 0);
+
+        const bonsByFactory = {};
+        (bons.data || []).forEach(b => {
+            const f = b.factories?.name || '(Tanpa Pabrik)';
+            bonsByFactory[f] = (bonsByFactory[f] || 0) + 1;
+        });
 
         res.json({
             totalWeight,
             totalPayment,
+            totalUnpaid,
             totalExp,
-            totalNetProfit: totalMargin - totalExp
+            totalNetProfit: totalMargin - totalExp,
+            totalBons: (bons.data || []).length,
+            bonsByFactory
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -174,7 +195,7 @@ app.get('/api/ledger', async (req, res) => {
                 notas (
                     *,
                     nota_items (
-                        bons (*, bon_deductions(*))
+                        bons (*, bon_deductions(*), factories(name))
                     )
                 )
             ),
@@ -190,16 +211,22 @@ app.get('/api/ledger', async (req, res) => {
         if (mError) throw mError;
 
         // 2. Fetch In-Progress Bons
-        const { data: inProgressBons, error: ipError } = await supabase.from('bons').select(`
+        let ipQuery = supabase.from('bons').select(`
             *,
             bon_deductions(*),
+            factories(name),
             nota_items (
                 notas (
                     *,
                     payments (*)
                 )
             )
-        `).order('bon_date', { ascending: false });
+        `).order('created_at', { ascending: false });
+
+        if (start) ipQuery = ipQuery.gte('bon_date', start);
+        if (end) ipQuery = ipQuery.lte('bon_date', end + 'T23:59:59');
+
+        const { data: inProgressBons, error: ipError } = await ipQuery;
 
         if (ipError) throw ipError;
 
@@ -213,7 +240,52 @@ app.get('/api/ledger', async (req, res) => {
             return payments.every(p => !p.margin_id);
         });
 
+        const isPaidBon = (bon) => {
+            if (bon.status === 'LUNAS') return true;
+            const notaItem = bon.nota_items && bon.nota_items[0];
+            const nota = notaItem ? notaItem.notas : null;
+            const payments = nota ? (nota.payments || []) : [];
+            return payments.some(p => p.proof_url);
+        };
+
+        // Sort: unpaid (not LUNAS) first, then by created_at desc
+        filteredIP.sort((a, b) => {
+            const aPaid = isPaidBon(a) ? 1 : 0;
+            const bPaid = isPaidBon(b) ? 1 : 0;
+            if (aPaid !== bPaid) return aPaid - bPaid;
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+
         res.json({ margins, inProgress: filteredIP });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// V2 API: Bon & Nota focused (no payments/margins)
+app.get('/api/v2/bons', async (req, res) => {
+    try {
+        const { start, end } = req.query;
+
+        let query = supabase.from('bons').select(`
+            id, bon_date, created_at, plate_number, netto_1, netto_2, price, total, status,
+            dp, bp_colt, pph, uang_minum,
+            factories(name),
+            relation_agents(name),
+            nota_items(
+                notas(
+                    invoice_number, invoice_date, total_amount, status
+                )
+            )
+        `).order('created_at', { ascending: false });
+
+        if (start) query = query.gte('bon_date', start);
+        if (end) query = query.lte('bon_date', end + 'T23:59:59');
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        res.json(data || []);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
