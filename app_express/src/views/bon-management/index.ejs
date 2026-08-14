@@ -50,7 +50,7 @@
     <article class="management-card <%= locked ? 'locked' : '' %>" data-bon-id="<%= bon.id %>" data-factory-id="<%= bon.factory_id || '' %>">
       <section class="management-segment bon-segment">
         <div class="segment-head">
-          <span>Bon Timbangan</span>
+          <span class="segment-title-label">Bon Timbangan <span class="ticket-tag"><%= bon.ticket_number || '-' %></span></span>
           <span class="select-area">
             <label class="merge-check" title="Pilih untuk digabung">
               <input type="checkbox" class="merge-select" <%= locked ? 'disabled' : '' %>>
@@ -64,7 +64,7 @@
             <% if (bon.image_url) { %>
               <button class="bon-image-preview" data-url="<%= bon.image_url %>" title="Lihat foto" style="border:1px solid #e2e8f0;background:#fff;cursor:pointer;padding:0 4px;color:#94a3b8;font-size:11px;line-height:1.5;border-radius:4px">📷</button>
             <% } %>
-            <strong><%= bon.ticket_number || '-' %></strong>
+            <strong><%= bon.plate_number %></strong>
           </div>
           <span><%= format.date(bon.bon_date) %></span>
         </div>
@@ -510,10 +510,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const relSelect = card.querySelector('[name="relation_agent_id"]');
         const newRelName = card.querySelector('[name="new_relation_name"]')?.value?.trim();
         if (relSelect && !relSelect.disabled) {
-          data.relation_agent_id = relSelect.value || '';
           if (newRelName) {
+            data.relation_agent_id = '';
             data.new_relation_name = newRelName;
             data.new_relation_address = card.querySelector('[name="new_relation_address"]')?.value || '';
+          } else {
+            data.relation_agent_id = relSelect.value || '';
           }
         }
         saveButton.disabled = true;
@@ -607,6 +609,8 @@ document.addEventListener('DOMContentLoaded', () => {
 .management-segment { border-right:1px solid var(--line); padding:10px 12px; min-width:0; }
 .management-segment:last-child { border-right:0; }
 .segment-head { align-items:center; color:var(--muted); display:flex; font-size:.64rem; font-weight:900; justify-content:space-between; letter-spacing:.05em; margin-bottom:8px; text-transform:uppercase; }
+.segment-title-label { align-items:center; display:flex; gap:6px; min-width:0; }
+.ticket-tag { background:var(--surface-soft); border:1px solid var(--line); border-radius:4px; color:var(--text); font-size:.68rem; font-weight:800; letter-spacing:0; padding:1px 6px; text-transform:none; }
 .segment-head svg { height:14px; width:14px; }
 .segment-title { color:var(--text); font-weight:950; line-height:1.2; margin-bottom:4px; }
 .muted-line { color:var(--muted); font-size:.74rem; line-height:1.35; }
@@ -658,6 +662,7 @@ document.addEventListener('DOMContentLoaded', () => {
 .ded-add { color:var(--primary-strong); }
 .total-row { border-top:1px solid var(--line); margin-top:8px; padding-top:8px; }
 .total-row strong { font-size:.85rem; }
+.total-row .bon-total { color:#2563eb; font-size:1.15rem; }
 .btn-primary.small, .btn-secondary.small { font-size:.7rem; min-height:24px; padding:.15rem .5rem; width:auto; }
 .action-row { justify-content:flex-start; margin-top:8px; }
 @media (max-width: 1180px) { .management-card { grid-template-columns:1fr 1fr; } .management-segment:nth-child(2) { border-right:0; } .management-segment:nth-child(-n+2) { border-bottom:1px solid var(--line); } }

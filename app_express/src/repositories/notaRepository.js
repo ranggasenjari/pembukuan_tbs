@@ -1,6 +1,7 @@
 const { applyDateRange, assertNoError } = require('./base');
 const { PAYMENT_STATUS, nowInvoiceNumber } = require('../services/calculations');
 const relationAgentRepository = require('./relationAgentRepository');
+const { notifyChange } = require('../services/realtimeService');
 
 async function resolveRecipient(supabase, body) {
   if (body.relation_agent_id) {
@@ -123,6 +124,7 @@ async function createNota(supabase, body, bonIds) {
     )
   );
   assertNoError(await supabase.from('bons').update({ status: PAYMENT_STATUS.TERTAGIH }).in('id', bonIds));
+  notifyChange('notas', 'INSERT', nota);
   return nota;
 }
 
@@ -229,6 +231,7 @@ async function mergeBonsIntoNota(supabase, bonIds, relationAgentId = null) {
 }
 
 async function deleteNota(supabase, id) {
+  const nota = await getNota(supabase, id);
   const payments = assertNoError(await supabase.from('payments').select('id').eq('invoice_id', id).limit(1));
   if (payments.length > 0) throw new Error('Nota sudah memiliki pembayaran, tidak dapat dihapus.');
   const bons = await getNotaBons(supabase, id);
@@ -238,6 +241,7 @@ async function deleteNota(supabase, id) {
   }
   assertNoError(await supabase.from('nota_items').delete().eq('invoice_id', id));
   assertNoError(await supabase.from('notas').delete().eq('id', id));
+  notifyChange('notas', 'DELETE', null, nota);
 }
 
 module.exports = {

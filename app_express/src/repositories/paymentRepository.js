@@ -1,6 +1,7 @@
 const { applyDateRange, assertNoError } = require('./base');
 const { PAYMENT_STATUS, toInt } = require('../services/calculations');
 const { getTotalDeposits } = require('./depositRepository');
+const { notifyChange } = require('../services/realtimeService');
 
 async function getTotalPayments(supabase) {
   const rows = assertNoError(await supabase.from('payments').select('amount_paid'));
@@ -74,6 +75,7 @@ async function createPayment(supabase, body, proofUrl) {
   if (bonIds.length > 0) {
     assertNoError(await supabase.from('bons').update({ status: PAYMENT_STATUS.LUNAS }).in('id', bonIds));
   }
+  notifyChange('payments', 'INSERT', payment);
   return payment;
 }
 

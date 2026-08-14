@@ -73,6 +73,17 @@ function broadcast(event, payload = {}) {
   clients.forEach((client) => client.res.write(message));
 }
 
+// Broadcast langsung dari dalam aplikasi saat data ditulis, agar klien tetap
+// mendapat notifikasi (suara + toast) meskipun channel realtime DB sedang down.
+function notifyChange(table, eventType, newRow = null, oldRow = null) {
+  try {
+    const description = buildDescription(table, eventType, newRow, oldRow);
+    broadcast('refresh', { table, eventType, description });
+  } catch (error) {
+    console.error('[realtime] notifyChange error:', error.message);
+  }
+}
+
 function attachClient(req, res) {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   res.setHeader('Content-Type', 'text/event-stream');
@@ -118,16 +129,27 @@ function setupRealtime() {
     );
   });
 
+  let wasDown = false;
   channel.subscribe((status, err) => {
     console.log(`[realtime] channel status: ${status}`, err ? err.message : '');
     if (status === 'SUBSCRIBED') {
       console.log('[realtime] subscribed to postgres_changes');
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      // Jika channel pulih setelah sempat down, beri tahu klien agar muat ulang
+      // dan menangkap data yang terlewat selama gangguan (reload diam).
+      if (wasDown) {
+        wasDown = false;
+        console.log('[realtime] resync broadcast after reconnect');
+        broadcast('refresh', { source: 'resync' });
+      }
     }
-    if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') startPollingFallback();
+    if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+      wasDown = true;
+      startPollingFallback();
+    }
   });
   channel.on('error', (e) => console.error('[realtime] channel error:', e.message));
 
 }
 
-module.exports = { attachClient, broadcast, buildDescription, setupRealtime };
+module.exports = { attachClient, broadcast, buildDescription, notifyChange, setupRealtime };

@@ -1,0 +1,8 @@
+[functions.offline-bootstrap]
+verify_jwt = true
+
+[functions.offline-upload-url]
+verify_jwt = true
+
+[functions.offline-sync]
+verify_jwt = true

@@ -72,11 +72,13 @@ class _NotaDetailScreenState extends ConsumerState<NotaDetailScreen> {
 
   Future<void> _sendWhatsapp(List<BonModel> bons) async {
     final message = NotaWhatsappService.buildMessage(widget.nota, bons);
-    final uri = Uri.parse(
-      'https://wa.me/?text=${Uri.encodeComponent(message)}',
-    );
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      throw Exception('Tidak dapat membuka WhatsApp.');
+    final nativeUri = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(message)}');
+    if (await launchUrl(nativeUri, mode: LaunchMode.externalApplication)) return;
+    await Clipboard.setData(ClipboardData(text: message));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('WhatsApp tidak tersedia; teks nota disalin.')),
+      );
     }
   }
 

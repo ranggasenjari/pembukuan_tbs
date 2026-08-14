@@ -1,5 +1,6 @@
 const { applyDateRange, assertNoError } = require('./base');
 const { PAYMENT_STATUS } = require('../services/calculations');
+const { notifyChange } = require('../services/realtimeService');
 
 function serializeBon(body, calculated, imageUrl) {
   const data = {
@@ -81,6 +82,7 @@ async function createBon(supabase, data, deductions = []) {
     );
   }
 
+  notifyChange('bons', 'INSERT', created);
   return getBon(supabase, created.id);
 }
 
@@ -101,11 +103,13 @@ async function updateBon(supabase, id, data, deductions = [], skipStatusCheck = 
       )
     );
   }
-  return getBon(supabase, id);
+  const updated = await getBon(supabase, id);
+  notifyChange('bons', 'UPDATE', updated);
+  return updated;
 }
 
 async function deleteBon(supabase, id) {
-  const current = assertNoError(await supabase.from('bons').select('status, image_url').eq('id', id).single());
+  const current = assertNoError(await supabase.from('bons').select('status, image_url, plate_number, ticket_number').eq('id', id).single());
   if (current.status !== PAYMENT_STATUS.BELUM_DIBAYAR) {
     throw new Error('Bon sudah diproses (Tertagih/Lunas), tidak dapat dihapus.');
   }
@@ -118,6 +122,7 @@ async function deleteBon(supabase, id) {
     }
   }
   assertNoError(await supabase.from('bons').delete().eq('id', id));
+  notifyChange('bons', 'DELETE', null, current);
 }
 
 async function getRelatedRecords(supabase, bonId) {

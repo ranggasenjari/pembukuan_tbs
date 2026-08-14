@@ -35,6 +35,16 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appName"] = "PEMBUKUAN TBS"
+    }
+    flavorDimensions += "edition"
+    productFlavors {
+        create("offline") {
+            dimension = "edition"
+            applicationIdSuffix = ".offline"
+            versionNameSuffix = "-offline"
+            manifestPlaceholders["appName"] = "PEMBUKUAN TBS OFFLINE"
+        }
     }
     signingConfigs {
         create("release") {

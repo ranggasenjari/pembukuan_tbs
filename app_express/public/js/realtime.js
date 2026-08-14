@@ -116,7 +116,7 @@
     setTimeout(() => {
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 250);
-    }, 5000);
+    }, 30000);
   }
 
   function savePending(description) {
@@ -125,8 +125,11 @@
       try { items = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '[]'); } catch (e) { items = []; }
       if (!Array.isArray(items)) items = [];
       if (description) {
-        items.push(description);
-        if (items.length > MAX_PENDING) items = items.slice(items.length - MAX_PENDING);
+        // Hindari duplikat berurutan (broadcast app + channel DB untuk perubahan yang sama)
+        if (items[items.length - 1] !== description) {
+          items.push(description);
+          if (items.length > MAX_PENDING) items = items.slice(items.length - MAX_PENDING);
+        }
       }
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch (e) {}
@@ -159,11 +162,11 @@
     }
   }
 
-  function refreshPage() {
+  function refreshPage(notify = true) {
     const now = Date.now();
     if (now - lastRefresh < THROTTLE_MS) return;
     lastRefresh = now;
-    playDing();
+    if (notify) playDing();
     // Reload the current view data without full page refresh
     const table = document.querySelector('table');
     if (table) {
@@ -191,12 +194,14 @@
       try {
         const data = JSON.parse(e.data);
         if (data.event !== 'refresh') return;
-        // Hanya perubahan data nyata (dengan tabel) yang memicu suara, toast & reload.
-        // Pesan tanpa tabel (poll fallback / keepalive saat channel DB down) diabaikan
-        // agar tidak berbunyi setiap interval.
         if (data.payload && tables.includes(data.payload.table)) {
+          // Perubahan data nyata: suara + toast + reload
           savePending(data.payload.description || null);
-          refreshPage();
+          refreshPage(true);
+        } else {
+          // Poll fallback / resync (tanpa tabel, saat channel DB down atau baru pulih):
+          // reload diam agar data tetap segar tanpa suara & toast
+          refreshPage(false);
         }
       } catch (err) {
         // Pesan tidak valid bukan perubahan data: abaikan

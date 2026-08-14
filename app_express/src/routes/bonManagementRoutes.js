@@ -101,19 +101,23 @@ router.patch('/bons/:id', asyncHandler(async (req, res) => {
   const body = { ...current, ...cleanBody(req.body), status: current.status };
 
   // Relasi Agen: pilih existing atau buat baru (hanya nama + alamat)
-  if (req.body.relation_agent_id !== undefined) {
+  const relationChanged =
+    req.body.relation_agent_id !== undefined || req.body.new_relation_name !== undefined;
+  if (relationChanged) {
+    const newRelName = req.body.new_relation_name ? String(req.body.new_relation_name).trim() : '';
     const relationAgentId = req.body.relation_agent_id || null;
-    if (relationAgentId) {
-      const agent = await relationAgentRepository.getRelationAgent(req.supabase, relationAgentId);
-      body.relation_agent_id = agent.id;
-      body.relation_name = agent.name;
-    } else if (req.body.new_relation_name && String(req.body.new_relation_name).trim()) {
+    if (newRelName) {
+      // Buat relasi baru — prioritas di atas pilihan dropdown
       const created = await relationAgentRepository.createRelationAgent(req.supabase, {
-        name: req.body.new_relation_name,
+        name: newRelName,
         address: req.body.new_relation_address || null
       });
       body.relation_agent_id = created.id;
       body.relation_name = created.name;
+    } else if (relationAgentId) {
+      const agent = await relationAgentRepository.getRelationAgent(req.supabase, relationAgentId);
+      body.relation_agent_id = agent.id;
+      body.relation_name = agent.name;
     } else {
       body.relation_agent_id = null;
     }
@@ -142,6 +146,22 @@ router.patch('/bons/:id', asyncHandler(async (req, res) => {
   const calculated = calculateBon({ ...body, deductions });
   const data = bonRepository.serializeBon(body, calculated, current.image_url);
   await bonRepository.updateBon(req.supabase, req.params.id, data, deductions, true);
+
+  // Jika relasi bon berubah, sinkronkan relasi nota yang menampung bon ini
+  if (relationChanged && current.relation_agent_id !== body.relation_agent_id) {
+    const related = await bonRepository.getRelatedRecords(req.supabase, req.params.id);
+    for (const nota of related.notas) {
+      await req.supabase
+        .from('notas')
+        .update({
+          relation_agent_id: body.relation_agent_id || null,
+          recipient_name: body.relation_agent_id ? null : (body.relation_name || null),
+          recipient_address: body.fruit_origin || null
+        })
+        .eq('id', nota.id);
+    }
+  }
+
   const updated = await bonRepository.getBon(req.supabase, req.params.id);
   res.json({ ok: true, bon: updated });
 }));
