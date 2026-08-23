@@ -5,6 +5,17 @@ function bonSpsiAmount(bon) {
   return toInt(bon.biaya_bongkar) * toInt(bon.netto_1);
 }
 
+function bonSpsiLines(bon) {
+  const total = bonSpsiAmount(bon);
+  if (total <= 0) return [];
+  const mode = String(bon.spsi_calculation_mode || '').trim().toUpperCase();
+  if (mode === 'FIX') return ['      SPSI:', `        ${money(total)}`];
+  const rate = bon.spsi_rate !== null && bon.spsi_rate !== undefined
+    ? toInt(bon.spsi_rate)
+    : toInt(bon.biaya_bongkar);
+  return ['      SPSI:', `        ${toInt(bon.netto_1)} kg x ${money(rate)} = ${money(total)}`];
+}
+
 function formatPhone(value) {
   const s = String(value || '').replace(/\D/g, '');
   if (s.startsWith('0')) return '+62' + s.slice(1);
@@ -43,7 +54,6 @@ function buildNotaWhatsappMessage(nota, bons = []) {
   let totalDp = 0;
   bons.forEach((bon, index) => {
     const bruto = toInt(bon.netto_2) * toInt(bon.price);
-    const spsi = bonSpsiAmount(bon);
     const bonDp = toInt(bon.dp);
     const bonTotalBeforeDp = toInt(bon.total) + bonDp;
     grandTotal += bonTotalBeforeDp;
@@ -55,12 +65,12 @@ function buildNotaWhatsappMessage(nota, bons = []) {
     lines.push('');
 
     lines.push('   *Potongan:*');
-    if (spsi > 0) lines.push(`      SPSI: ${money(spsi)}`);
-    if (toInt(bon.bp_colt) > 0) lines.push(`      BP/Colt: ${money(bon.bp_colt)}`);
-    if (toInt(bon.pph) > 0) lines.push(`      PPh: ${money(bon.pph)}`);
-    if (toInt(bon.uang_minum) > 0) lines.push(`      Uang Minum: ${money(bon.uang_minum)}`);
+    lines.push(...bonSpsiLines(bon));
+    if (toInt(bon.bp_colt) > 0) lines.push('      BP/Colt:', `        ${money(bon.bp_colt)}`);
+    if (toInt(bon.pph) > 0) lines.push('      PPh (0,25%):', `        ${money(bon.pph)}`);
+    if (toInt(bon.uang_minum) > 0) lines.push('      Uang Minum:', `        ${money(bon.uang_minum)}`);
     (bon.bon_deductions || []).forEach((d) => {
-      if (toInt(d.amount) > 0) lines.push(`      ${d.label || 'Potongan'}: ${money(d.amount)}`);
+      if (toInt(d.amount) > 0) lines.push(`      ${d.label || 'Potongan'}:`, `        ${money(d.amount)}`);
     });
     lines.push(`   *Total bon: ${money(bonTotalBeforeDp)}*`);
     lines.push('');
@@ -76,6 +86,7 @@ function buildNotaWhatsappMessage(nota, bons = []) {
 
 module.exports = {
   bonSpsiAmount,
+  bonSpsiLines,
   buildNotaWhatsappMessage,
   buildPaymentInfoMessage
 };

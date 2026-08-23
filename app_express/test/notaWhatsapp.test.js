@@ -22,7 +22,7 @@ describe('notaWhatsapp', () => {
 
     expect(message).toContain('Relasi: AGEN MAJU');
     expect(message).toContain('1000 kg x Rp');
-    expect(message).toContain('SPSI: Rp');
+    expect(message).toContain('SPSI:');
     expect(message).toContain('TOTAL NOTA: Rp');
   });
 
@@ -49,8 +49,9 @@ describe('notaWhatsapp', () => {
     expect(normalized).toContain('*TOTAL NOTA: Rp 1.000.000*');
     expect(normalized).toContain('DP / Panjar: Rp 200.000');
     expect(normalized).toContain('*Total Akhir: Rp 800.000*');
-    expect(normalized).toContain('      Pengiriman: Rp 10.000');
+    expect(normalized).toContain('      Pengiriman:');
+    expect(normalized).toContain('        Rp 10.000');
     // DP tidak dicantumkan pada daftar potongan
-    expect(normalized).not.toContain('      DP: Rp');
+    expect(normalized).not.toContain('      DP:');
   });
 });
