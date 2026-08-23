@@ -93,4 +93,13 @@ router.post('/api/bon/publik/:id/payment-relation/new', asyncHandler(async (req,
   res.json({ ok: true, id: paymentRelation.id });
 }));
 
+router.post('/api/bon/publik/:id/payment-relation', asyncHandler(async (req, res) => {
+  const bon = await bonRepository.getBon(req.supabase, req.params.id);
+  const vehicle = await ensureVehicleForBon(req.supabase, bon);
+  const paymentRelationId = String(req.body.payment_relation_id || '').trim();
+  if (!paymentRelationId) throw new Error('Pilih Relasi Bayar terlebih dahulu.');
+  await paymentRelationRepository.bindVehicle(req.supabase, paymentRelationId, vehicle.id);
+  res.json({ ok: true, id: paymentRelationId });
+}));
+
 module.exports = router;

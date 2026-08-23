@@ -58,7 +58,7 @@
       <section class="mt-2 rounded-lg bg-slate-50 px-2 py-1.5"><div class="flex items-center justify-between text-[11px] font-bold text-slate-600"><span>Potongan lain</span><button type="button" class="add-ded text-[11px] font-bold text-blue-600">+ Tambah</button></div><div class="mt-1 deductions space-y-1"></div></section>
       <div class="mt-2 grid grid-cols-[1fr_auto] items-center gap-2 border-t border-slate-100 pt-2"><div class="flex items-center gap-1"><strong class="total text-lg text-blue-700"></strong><button type="button" class="copy-total copy-button" title="Salin total">Salin</button></div><button type="button" class="save rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Simpan</button></div>
       <div class="mt-2 grid grid-cols-2 gap-2"><button type="button" class="wa rounded-lg border border-emerald-600 px-2 py-2 text-xs font-bold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">WA</button><button type="button" class="settle rounded-lg bg-amber-400 px-2 py-2 text-xs font-bold text-amber-950 disabled:cursor-not-allowed disabled:opacity-40">Nota selesai</button></div>
-      <section class="payment-info mt-2 hidden rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2 text-[11px] text-emerald-950"><div class="payment-details"><p class="payment-name font-black"></p><p class="payment-contact flex items-center gap-1 text-emerald-800"><span class="payment-contact-value"></span><button type="button" class="copy-contact copy-button" title="Salin kontak">Salin</button><button type="button" class="wa-contact" title="Buka chat WhatsApp">Chat WA</button></p><div class="payment-accounts mt-1 space-y-1"></div></div><button type="button" class="add-relation hidden w-full rounded-lg border border-dashed border-emerald-400 bg-white px-2 py-1.5 text-[11px] font-bold text-emerald-700">+ Relasi Bayar</button></section>
+      <section class="payment-info mt-2 hidden rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2 text-[11px] text-emerald-950"><div class="payment-details"><p class="payment-name font-black"></p><p class="payment-contact flex items-center gap-1 text-emerald-800"><span class="payment-contact-value"></span><button type="button" class="copy-contact copy-button" title="Salin kontak">Salin</button><button type="button" class="wa-contact" title="Buka chat WhatsApp">Chat WA</button></p><div class="payment-accounts mt-1 space-y-1"></div></div><div class="existing-relation hidden"><div class="flex gap-2"><select class="existing-relation-select input flex-1 text-[11px]"><option value="">— Pilih Relasi Bayar —</option></select><button type="button" class="link-existing-relation rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white">Hubungkan</button></div></div><button type="button" class="add-relation hidden w-full rounded-lg border border-dashed border-emerald-400 bg-white px-2 py-1.5 text-[11px] font-bold text-emerald-700">+ Relasi Bayar</button></section>
     </article>
   </template>
 
@@ -66,6 +66,7 @@
     const BASE = <%- JSON.stringify(basePath || '') %>;
     const factories = <%- JSON.stringify(factories).replace(/</g, '\\u003c') %>;
     const items = <%- JSON.stringify(items).replace(/</g, '\\u003c') %>;
+    const paymentRelations = <%- JSON.stringify(paymentRelations).replace(/</g, '\\u003c') %>;
     const rupiah = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
     const deck = document.querySelector('#deck'), empty = document.querySelector('#empty'), pager = document.querySelector('#pager');
     let filtered = [...items], index = 0, selectedFactoryId = '';
@@ -141,7 +142,26 @@
         }));
         if (!accounts.length) card.querySelector('.payment-accounts').textContent = 'Rekening: -';
       } else {
-        card.querySelector('.payment-info').classList.remove('hidden'); card.querySelector('.payment-details').classList.add('hidden'); const addRelation = card.querySelector('.add-relation'); addRelation.classList.remove('hidden'); addRelation.onclick = () => openRelationModal(bon);
+        card.querySelector('.payment-info').classList.remove('hidden'); card.querySelector('.payment-details').classList.add('hidden');
+        const existingWrap = card.querySelector('.existing-relation');
+        const existingSelect = card.querySelector('.existing-relation-select');
+        const linkBtn = card.querySelector('.link-existing-relation');
+        if (existingWrap && existingSelect && linkBtn) {
+          existingWrap.classList.remove('hidden');
+          existingSelect.innerHTML = '<option value="">— Pilih Relasi Bayar —</option>' + paymentRelations.map((r) => `<option value="${r.id}">${r.name}</option>`).join('');
+          linkBtn.onclick = async () => {
+            const pid = existingSelect.value;
+            if (!pid) { alert('Pilih Relasi Bayar terlebih dahulu.'); return; }
+            linkBtn.disabled = true; linkBtn.textContent = 'Menghubungkan…';
+            try {
+              const res = await fetch(appUrl(`/api/bon/publik/${bon.id}/payment-relation`), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ payment_relation_id: pid }) });
+              const result = await res.json();
+              if (!res.ok || !result.ok) throw new Error(result.error || 'Gagal menghubungkan relasi bayar.');
+              location.reload();
+            } catch (error) { alert(error.message); linkBtn.disabled = false; linkBtn.textContent = 'Hubungkan'; }
+          };
+        }
+        const addRelation = card.querySelector('.add-relation'); addRelation.classList.remove('hidden'); addRelation.onclick = () => openRelationModal(bon);
       }
       ['plate_number','driver_name','netto_1','netto_2','price','uang_minum','dp','bp_colt','notes'].forEach((name) => field(card, name).value = bon[name] ?? '');
       field(card, 'relation_agent_id').value = bon.relation_agent_id || '';
