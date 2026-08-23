@@ -5,6 +5,15 @@
     ? item.payment_relation_accounts
     : [{ bank_name: '', account_number: '', account_name: '' }];
   const selectedVehicleIds = new Set((item.payment_relation_vehicles || []).map((row) => row.vehicle_id));
+  const hutang = item.payment_relation_hutang && item.payment_relation_hutang.length
+    ? item.payment_relation_hutang
+    : [{ tanggal: '', amount: 0, notes: '' }];
+  const rolling = item.payment_relation_rolling && item.payment_relation_rolling.length
+    ? item.payment_relation_rolling
+    : [{ tanggal: '', amount: 0, notes: '' }];
+  const giringan = item.payment_relation_giringan && item.payment_relation_giringan.length
+    ? item.payment_relation_giringan
+    : [{ name: '' }];
 %>
 <div class="page-head">
   <div>
@@ -20,25 +29,85 @@
     <div class="grid gap-4 md:grid-cols-3">
       <label><span class="form-label">Nama Relasi Bayar</span><input required name="name" value="<%= item.name || '' %>" class="form-input uppercase"></label>
       <label><span class="form-label">Kontak</span><input name="contact" value="<%= item.contact || '' %>" class="form-input"></label>
+      <label><span class="form-label">Fee (Rp)</span><input name="fee" type="number" inputmode="numeric" value="<%= item.fee ?? '' %>" class="form-input" placeholder="0"></label>
+      <label><span class="form-label">Potongan BP (Rp)</span><input name="potongan_bp" type="number" inputmode="numeric" value="<%= item.potongan_bp ?? '' %>" class="form-input" placeholder="0"></label>
+      <label><span class="form-label">Harga / Kg (Rp)</span><input name="harga" type="number" inputmode="numeric" value="<%= item.harga ?? '' %>" class="form-input" placeholder="0"></label>
+      <label><span class="form-label">Uang Minum (Rp)</span><input name="uang_minum" type="number" inputmode="numeric" value="<%= item.uang_minum ?? '' %>" class="form-input" placeholder="0"></label>
+      <label class="md:col-span-3"><span class="form-label text-xs font-normal text-slate-500">Kosongkan untuk ikut kendaraan / default. Harga: di luar -100 s.d. 100 = harga tetap; antara -100 s.d. 100 = offset (±) dari harga pabrik.</span></label>
       <label class="md:col-span-3"><span class="form-label">Alamat / Asal</span><input name="address" value="<%= item.address || '' %>" class="form-input uppercase"></label>
       <label class="md:col-span-3"><span class="form-label">Catatan</span><textarea name="notes" rows="3" class="form-input"><%= item.notes || '' %></textarea></label>
     </div>
   </section>
 
   <section class="form-card">
-    <h2>Kendaraan</h2>
-    <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 mt-4">
-      <% if (!vehicles.length) { %><p class="empty md:col-span-2 lg:col-span-3">Belum ada kendaraan. Tambahkan dahulu dari modul Kendaraan.</p><% } %>
-      <% vehicles.forEach((vehicle) => { %>
-        <label class="select-row">
-          <input type="checkbox" name="vehicle_ids" value="<%= vehicle.id %>" <%= selectedVehicleIds.has(vehicle.id) ? 'checked' : '' %>>
-          <span>
-            <strong><%= vehicle.plate_number %></strong>
-            <small><%= vehicle.driver_name || '-' %></small>
-          </span>
-        </label>
+    <div class="flex items-center justify-between">
+      <h2>Hutang</h2>
+      <button type="button" id="add-hutang" class="btn-secondary small">Tambah Hutang</button>
+    </div>
+    <div id="hutang-rows" class="mt-4 space-y-3">
+      <% hutang.forEach((row) => { %>
+        <div class="dated-row grid gap-3 md:grid-cols-[170px_180px_1fr_48px]">
+          <input name="hutang_tanggal" type="date" value="<%= row.tanggal || '' %>" class="form-input compact">
+          <input name="hutang_amount" type="number" inputmode="numeric" value="<%= row.amount || 0 %>" class="form-input compact" placeholder="Rp">
+          <input name="hutang_notes" value="<%= row.notes || '' %>" class="form-input compact" placeholder="Catatan">
+          <button type="button" class="remove-row rounded-lg bg-rose-50 text-rose-700">x</button>
+        </div>
       <% }) %>
     </div>
+  </section>
+
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Rolling</h2>
+      <button type="button" id="add-rolling" class="btn-secondary small">Tambah Rolling</button>
+    </div>
+    <div id="rolling-rows" class="mt-4 space-y-3">
+      <% rolling.forEach((row) => { %>
+        <div class="dated-row grid gap-3 md:grid-cols-[170px_180px_1fr_48px]">
+          <input name="rolling_tanggal" type="date" value="<%= row.tanggal || '' %>" class="form-input compact">
+          <input name="rolling_amount" type="number" inputmode="numeric" value="<%= row.amount || 0 %>" class="form-input compact" placeholder="Rp">
+          <input name="rolling_notes" value="<%= row.notes || '' %>" class="form-input compact" placeholder="Catatan">
+          <button type="button" class="remove-row rounded-lg bg-rose-50 text-rose-700">x</button>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Giringan</h2>
+      <button type="button" id="add-giringan" class="btn-secondary small">Tambah Nama</button>
+    </div>
+    <div id="giringan-rows" class="mt-4 space-y-3">
+      <% giringan.forEach((row) => { %>
+        <div class="giringan-row flex gap-3">
+          <input name="giringan_name" value="<%= row.name || '' %>" class="form-input uppercase" placeholder="Nama giringan">
+          <button type="button" class="remove-row rounded-lg bg-rose-50 text-rose-700">x</button>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="form-card" id="vehicle-picker-root">
+    <h2>Kendaraan</h2>
+    <% if (!vehicles.length) { %>
+      <p class="empty">Belum ada kendaraan. Tambahkan dahulu dari modul Kendaraan.</p>
+    <% } else { %>
+      <div class="mt-4">
+        <label class="form-label">Kendaraan (pilih beberapa)</label>
+        <div id="vehicle-field" class="form-input min-h-[52px] h-auto flex flex-wrap gap-2 items-center cursor-pointer" style="padding:8px 12px; background:#f8fafc;">
+          <div id="vehicle-chips" class="flex flex-wrap gap-2"></div>
+          <span id="vehicle-placeholder" class="text-sm text-slate-400">Ketuk untuk memilih plat / nama supir...</span>
+        </div>
+        <p class="text-xs text-slate-500 mt-2"><span id="vehicle-count">0</span> terpilih</p>
+        <!-- hidden checkboxes for form submission (mirrors selected set) -->
+        <div id="vehicle-checkboxes" class="hidden">
+          <% vehicles.forEach((vehicle) => { %>
+            <input type="checkbox" name="vehicle_ids" value="<%= vehicle.id %>" data-plate="<%= vehicle.plate_number %>" data-driver="<%= vehicle.driver_name || '' %>" <%= selectedVehicleIds.has(vehicle.id) ? 'checked' : '' %>>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
   </section>
 
   <section class="form-card">
@@ -60,5 +129,36 @@
 
   <button class="btn-primary">Simpan Relasi Bayar</button>
 </form>
+
+<!-- Vehicle picker modal - Flutter bottom sheet style (pencarian + chips) -->
+<div id="vehicle-modal" class="fixed inset-0 hidden" style="z-index:50;">
+  <div id="vehicle-modal-backdrop" class="absolute inset-0 bg-black/40"></div>
+  <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl border-t border-slate-200">
+    <div class="p-4 border-b border-slate-200">
+      <div class="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-3"></div>
+      <h3 class="font-bold text-center text-[15px]">Pilih Kendaraan</h3>
+      <div class="relative mt-3">
+        <input id="vehicle-search" type="text" placeholder="Cari plat / nama supir..." class="form-input pl-9" autocomplete="off">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+      </div>
+    </div>
+    <div id="vehicle-list" class="flex-1 overflow-auto divide-y divide-slate-100 p-2">
+      <% vehicles.forEach((vehicle) => { %>
+        <label class="vehicle-option flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-lg cursor-pointer" data-plate="<%= vehicle.plate_number %>" data-driver="<%= vehicle.driver_name || '' %>">
+          <input type="checkbox" class="vehicle-check w-4 h-4 rounded border-slate-300 text-[#0f766e] focus:ring-[#0f766e]" value="<%= vehicle.id %>" <%= selectedVehicleIds.has(vehicle.id) ? 'checked' : '' %>>
+          <span class="flex-1 min-w-0">
+            <span class="block font-semibold text-sm truncate"><%= vehicle.plate_number %></span>
+            <span class="block text-xs text-slate-500 truncate"><%= vehicle.driver_name || '-' %></span>
+          </span>
+        </label>
+      <% }) %>
+      <p id="vehicle-empty" class="hidden text-center text-sm text-slate-500 py-6">Tidak ditemukan.</p>
+    </div>
+    <div class="p-4 border-t border-slate-200">
+      <button type="button" id="vehicle-modal-ok" class="btn-primary w-full">OK</button>
+    </div>
+  </div>
+</div>
+
 <script src="<%= url('/js/payment-relation-form.js') %>"></script>
 <%- include('../partials/footer') %>
