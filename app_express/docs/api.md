@@ -89,7 +89,7 @@ Endpoint lain:
 - `GET /bons/:id`
 - `PATCH /bons/:id`
 - `DELETE /bons/:id`
-- `POST /bons/ocr` multipart field `file`
+- `POST /bons/ocr` multipart fields `file` + `factory_id` (wajib, menentukan prompt OCR per pabrik)
 
 ## Nota dan PDF
 
@@ -186,6 +186,27 @@ Pengeluaran:
 - `DELETE /expenses/:id`
 
 Kategori expense `DEPOSIT (SALDO)` tetap otomatis membuat deposit `source=Deposit dari profit` dan `category=kredit`.
+
+## Bon tambahan
+
+- `POST /bons/:id/recalc` — hitung ulang (menggantikan `GET /bons/recalc/:id` yang deprecated)
+- `GET /bons/:id/sub-notas`, `POST /bons/:id/sub-notas`, `DELETE /sub-notas/:id`
+- `POST /notas/:id/settle` — lunasi nota tanpa bukti (body opsional `{ "payment_date": "2026-05-16" }`)
+
+## Pabrik
+
+- `GET /factories`, `POST /factories`, `GET /factories/:id`, `PATCH /factories/:id`, `DELETE /factories/:id`
+
+## Relasi Bayar
+
+- `GET /payment-relations?q=`, `POST /payment-relations`, `GET /payment-relations/:id`, `PATCH /payment-relations/:id`, `DELETE /payment-relations/:id`
+- Mendukung field `fee`, `potongan_bp`, `harga`, `uang_minum`, `payment_relation_accounts[]`, `payment_relation_vehicles[]`, `hutang/rolling/giringan`.
+
+## Kendaraan
+
+- `GET /vehicles?q=` (enriched + riwayat, terurut bon terbaru), `POST /vehicles`, `GET /vehicles/:id`, `PATCH /vehicles/:id`, `DELETE /vehicles/:id`
+- `POST /vehicles/:id/payment-relation` — ikat/lepas relasi bayar (`{ payment_relation_id }`, kosongkan untuk lepas)
+- `POST /vehicles/:id/payment-relation/new` — buat relasi bayar baru & langsung ikat
 
 ## Laporan
 

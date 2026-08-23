@@ -48,6 +48,71 @@ function extractDropOcrData(payload) {
   return data;
 }
 
+function getOcrFactories() {
+  return window.FACTORIES || [];
+}
+
+function getOcrFactoryName(id) {
+  return getOcrFactories().find((f) => f.id === id)?.name || '';
+}
+
+// Dialog pilih pabrik — self-contained. Kembalikan null bila dibatalkan,
+// atau { id, name } (id boleh kosong = default / tanpa pabrik).
+function showOcrFactoryDialog() {
+  const factories = getOcrFactories();
+  const existingId = document.querySelector('[name="factory_id"]')?.value
+    || sessionStorage.getItem('ocr_factory_id')
+    || '';
+  return new Promise((resolve) => {
+    const dialog = document.createElement('dialog');
+    dialog.id = 'ocr-factory-dialog';
+    dialog.className = 'rounded-xl shadow-xl p-6 max-w-md';
+    dialog.innerHTML = `
+      <h3 class="text-lg font-bold mb-1">Pilih Pabrik</h3>
+      <p class="text-sm text-slate-500 mb-4">OCR akan memakai prompt &amp; schema khusus pabrik ini (bila tersedia).</p>
+      <select id="ocr-factory-picker" class="form-input mb-4">
+        <option value="">(Default / Tanpa Pabrik)</option>
+      </select>
+      <div class="flex gap-2 justify-end">
+        <button type="button" id="ocr-factory-cancel" class="btn-secondary">Batal</button>
+        <button type="button" id="ocr-factory-ok" class="btn-primary">Proses OCR</button>
+      </div>
+    `;
+    document.body.appendChild(dialog);
+    const picker = dialog.querySelector('#ocr-factory-picker');
+    factories.forEach((factory) => {
+      const option = document.createElement('option');
+      option.value = factory.id;
+      option.textContent = factory.name;
+      picker.appendChild(option);
+    });
+    picker.value = existingId && factories.some((f) => f.id === existingId) ? existingId : '';
+    dialog.querySelector('#ocr-factory-cancel').addEventListener('click', () => {
+      dialog.close();
+      resolve(null);
+    });
+    dialog.querySelector('#ocr-factory-ok').addEventListener('click', () => {
+      const id = picker.value;
+      dialog.close();
+      resolve({ id, name: getOcrFactoryName(id) });
+    });
+    dialog.showModal();
+  });
+}
+
+function setOcrFactory(selection) {
+  const id = selection?.id || '';
+  const name = selection?.name || '';
+  sessionStorage.setItem('ocr_factory_id', id);
+  const factoryInput = document.querySelector('[name="factory_id"]');
+  const factoryNameInput = document.querySelector('[name="factory_name"]');
+  if (factoryInput) {
+    factoryInput.value = id;
+    if (typeof applyFactorySelection === 'function') applyFactorySelection();
+    if (factoryNameInput) factoryNameInput.value = name;
+  }
+}
+
 document.addEventListener('drop', async (e) => {
   if (dropOverlay) dropOverlay.style.display = 'none';
 
@@ -55,6 +120,15 @@ document.addEventListener('drop', async (e) => {
   if (!files || files.length === 0) return;
   const file = files[0];
   if (!isImageFile(file)) return;
+
+  // Pilih pabrik dulu (sesuai pengaturan OCR per pabrik)
+  let factorySelection = { id: '', name: '' };
+  if (getOcrFactories().length) {
+    const selection = await showOcrFactoryDialog();
+    if (!selection) return; // dibatalkan
+    factorySelection = selection;
+    setOcrFactory(factorySelection);
+  }
 
   const status = document.getElementById('drop-status') || (() => {
     const el = document.createElement('div');
@@ -77,12 +151,20 @@ document.addEventListener('drop', async (e) => {
   try {
     const formData = new FormData();
     formData.append('file', file, file.name || 'bon.jpg');
+    if (factorySelection.id) {
+      formData.append('factory_id', factorySelection.id);
+      formData.append('factory_name', factorySelection.name);
+    }
 
     const baseUrl = window.appUrl ? window.appUrl('') : '';
     const res = await fetch(baseUrl + '/api/ocr/bon', { method: 'POST', body: formData });
     if (!res.ok) throw new Error('OCR gagal dengan status ' + res.status);
     const payload = await res.json();
     const data = extractDropOcrData(payload);
+    if (factorySelection.id) {
+      data.factory_id = factorySelection.id;
+      data.factory_name = factorySelection.name;
+    }
     sessionStorage.setItem('ocr_data', JSON.stringify(data));
     status.innerHTML = '<div style="text-align:center"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 16px;color:#86efac"><polyline points="20 6 9 17 4 12"/></svg><p style="font-size:1.25rem;font-weight:bold">OK, mengarahkan...</p></div>';
 
@@ -114,10 +196,15 @@ function applyOcrData() {
       if (input) input.value = normalized[key];
     }
   });
+  if (normalized.factory_id && document.querySelector('[name="factory_id"]')) {
+    document.querySelector('[name="factory_id"]').value = normalized.factory_id;
+    if (typeof applyFactorySelection === 'function') applyFactorySelection();
+  }
   if (normalized.image_url) {
     const input = document.querySelector('[name="ocr_image_url"]');
     if (input) input.value = normalized.image_url;
   }
+  if (normalized.image_url && typeof updateBonPhoto === 'function') updateBonPhoto(normalized.image_url);
 
   if (typeof matchOcrToMasters === 'function') matchOcrToMasters();
   if (typeof calculate === 'function') calculate();

@@ -17,6 +17,13 @@ router.get('/new', (req, res) => {
 router.post('/', asyncHandler(async (req, res) => {
   const relationAgent = await relationAgentRepository.createRelationAgent(req.supabase, req.body);
   req.flash('success', 'Relasi / Agen berhasil disimpan.');
+  if (req.headers['x-requested-with'] === 'XMLHttpRequest') {
+    return res.status(201).json({
+      id: relationAgent.id,
+      name: relationAgent.name,
+      contact: relationAgent.contact
+    });
+  }
   res.redirect(`/relation-agents/${relationAgent.id}`);
 }));
 

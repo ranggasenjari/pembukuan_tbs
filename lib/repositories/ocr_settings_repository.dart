@@ -36,8 +36,14 @@ class OcrSettingsRepository {
     required String mistralApiKey,
     required String mistralPrompt,
     required String mistralOutputSchema,
+    Map<String, OcrFactorySettings>? factorySettings,
   }) async {
     json.decode(mistralOutputSchema);
+    for (final settings in (factorySettings ?? current.factorySettings).values) {
+      if (settings.outputSchema != null && settings.outputSchema!.trim().isNotEmpty) {
+        json.decode(settings.outputSchema!);
+      }
+    }
     final next = current.copyWith(
       mode: mode,
       webhookUrl: webhookUrl.trim().isEmpty
@@ -53,6 +59,7 @@ class OcrSettingsRepository {
           ? OcrSettingsModel.defaults().mistralPrompt
           : mistralPrompt.trim(),
       mistralOutputSchema: mistralOutputSchema.trim(),
+      factorySettings: factorySettings ?? current.factorySettings,
     );
 
     await _client.from('app_settings').upsert({

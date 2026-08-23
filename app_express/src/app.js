@@ -29,6 +29,7 @@ const apiRoutes = require('./routes/apiRoutes');
 const apiV1Routes = require('./routes/apiV1Routes');
 const reportRoutes = require('./routes/reportRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const bonPublikRoutes = require('./routes/bonPublikRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 
 const app = express();
@@ -103,6 +104,7 @@ mainRouter.get('/api/v1/swagger.json', (req, res) => {
 mainRouter.use('/api/v1', apiV1Routes);
 mainRouter.use(publicAuth);
 mainRouter.use(publicRoutes);
+mainRouter.use(bonPublikRoutes);
 // SSE events — public (no auth) agar client bisa connect
 mainRouter.get('/api/events', (req, res) => attachClient(req, res));
 mainRouter.use(requireAuth);

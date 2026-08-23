@@ -1,6 +1,11 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+
+/// Sinyal bahwa layar awal aplikasi sudah selesai ditentukan (StartupGate).
+/// Dipakai handler share agar tidak menabrak navigasi splash saat cold start.
+final ValueNotifier<bool> appStartupReady = ValueNotifier(false);
 
 class SharingService {
   static final SharingService _instance = SharingService._internal();
@@ -8,12 +13,14 @@ class SharingService {
   SharingService._internal();
 
   StreamSubscription? _intentDataStreamSubscription;
-  Function(List<SharedMediaFile>)? _onSharingReceived;
+  Future<void> Function(List<SharedMediaFile>)? _onSharingReceived;
 
-  void init({required Function(List<SharedMediaFile>) onSharingReceived}) {
+  void init({
+    required Future<void> Function(List<SharedMediaFile>) onSharingReceived,
+  }) {
     _onSharingReceived = onSharingReceived;
 
-    // For sharing images coming from outside the app while the app is in the memory
+    // Sharing gambar saat aplikasi sedang berjalan di memori
     _intentDataStreamSubscription = ReceiveSharingIntent.instance
         .getMediaStream()
         .listen(
@@ -27,13 +34,13 @@ class SharingService {
           },
         );
 
-    // For sharing images coming from outside the app while the app is closed
-    ReceiveSharingIntent.instance.getInitialMedia().then((
-      List<SharedMediaFile> value,
-    ) {
+    // Sharing gambar saat aplikasi dibuka dari luar (cold start)
+    ReceiveSharingIntent.instance.getInitialMedia().then((value) async {
       if (value.isNotEmpty) {
-        _onSharingReceived?.call(value);
+        await _onSharingReceived?.call(value);
       }
+      // Reset agar intent berikutnya tetap bisa diterima.
+      ReceiveSharingIntent.instance.reset();
     });
   }
 

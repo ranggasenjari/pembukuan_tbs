@@ -88,7 +88,8 @@ const setupRealtime = () => {
     const tables = [
         'bons', 'notas', 'payments', 'margins', 'expenses', 'expense_margins', 'nota_items',
         'bon_deductions', 'factories', 'relation_agents', 'relation_agent_transports',
-        'relation_agent_accounts', 'relation_agent_drivers', 'factory_prices', 'factory_spsi_types'
+        'relation_agent_accounts', 'relation_agent_drivers', 'factory_prices', 'factory_spsi_types',
+        'sub_notas'
     ];
 
     tables.forEach(table => {
@@ -195,7 +196,7 @@ app.get('/api/ledger', async (req, res) => {
                 notas (
                     *,
                     nota_items (
-                        bons (*, bon_deductions(*), factories(name))
+                        bons (*, bon_deductions(*), factories(name), sub_notas(*))
                     )
                 )
             ),
@@ -215,6 +216,7 @@ app.get('/api/ledger', async (req, res) => {
             *,
             bon_deductions(*),
             factories(name),
+            sub_notas(*),
             nota_items (
                 notas (
                     *,
@@ -272,6 +274,7 @@ app.get('/api/v2/bons', async (req, res) => {
             dp, bp_colt, pph, uang_minum,
             factories(name),
             relation_agents(name),
+            sub_notas(*),
             nota_items(
                 notas(
                     invoice_number, invoice_date, total_amount, status

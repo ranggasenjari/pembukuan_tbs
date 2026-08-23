@@ -14,6 +14,7 @@ const TABLE_LABELS = {
   payment_relations: 'Relasi Bayar',
   payment_relation_accounts: 'Rekening Relasi Bayar',
   payment_relation_vehicles: 'Kendaraan Relasi Bayar',
+  sub_notas: 'Sub Nota',
   relation_agents: 'Relasi/Agen',
   relation_agent_accounts: 'Rekening Relasi/Agen',
   vehicles: 'Kendaraan',
@@ -114,7 +115,7 @@ function setupRealtime() {
     'bons', 'bon_deductions', 'notas', 'nota_items', 'payments',
     'payment_relations', 'payment_relation_accounts', 'payment_relation_vehicles',
     'relation_agents', 'relation_agent_accounts', 'vehicles', 'factories', 'factory_spsi_types', 'factory_prices',
-    'margins', 'expenses', 'expense_margins', 'deposits'
+    'margins', 'expenses', 'expense_margins', 'deposits', 'sub_notas'
   ];
 
   tables.forEach((table) => {

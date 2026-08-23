@@ -8,10 +8,16 @@ const router = express.Router();
 router.get('/', (req, res) => res.redirect('/dashboard'));
 
 router.get('/dashboard', asyncHandler(async (req, res) => {
-  const start = req.query.start || monthStartInput();
-  const end = req.query.end || todayInput();
+  const today = todayInput();
+  const start = req.query.start || today;
+  const end = req.query.end || today;
   const stats = await dashboardRepository.getDashboardStats(req.supabase, start, end);
-  res.render('dashboard/index', { title: 'Dashboard', stats, filters: { start, end } });
+  res.render('dashboard/index', {
+    title: 'Dashboard',
+    stats,
+    filters: { start, end },
+    presets: { today, monthStart: monthStartInput() }
+  });
 }));
 
 module.exports = router;

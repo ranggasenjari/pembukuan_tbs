@@ -240,5 +240,6 @@ document.querySelectorAll('.bp-pill').forEach(pill => {
 </style>
 <script src="<%= url('/js/image-preview.js') %>"></script>
 <script src="<%= url('/js/realtime.js') %>"></script>
+<script>window.FACTORIES = <%- JSON.stringify(factories || []) %>;</script>
 <%- include('../partials/footer') %>
 <script src="<%= url('/js/drop-ocr.js') %>"></script>

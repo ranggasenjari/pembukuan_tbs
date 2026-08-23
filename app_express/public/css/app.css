@@ -300,12 +300,36 @@ body {
   width: 36px;
 }
 
-.mobile-tabs {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-  overflow-x: auto;
-  padding-bottom: 2px;
+.mobile-hamburger {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.mobile-hamburger svg {
+  height: 18px;
+  width: 18px;
+}
+
+.mobile-overlay {
+  background: rgb(15 23 42 / 0.45);
+  bottom: 0;
+  display: none;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 30;
+}
+
+body.mobile-nav-open .mobile-overlay {
+  display: block;
 }
 
 table {
@@ -400,6 +424,16 @@ tbody tr:last-child td {
 .btn-secondary:hover {
   background: var(--surface-soft);
   border-color: #b8c0cc;
+}
+
+.btn-secondary.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.btn-secondary.active:hover {
+  background: var(--primary-strong);
 }
 
 .btn-danger {
@@ -1244,7 +1278,20 @@ a.stat-card:hover {
 
 @media (max-width: 1024px) {
   .app-sidebar {
-    display: none;
+    box-shadow: 10px 0 30px rgb(15 23 42 / 0.18);
+    display: flex;
+    max-width: 84vw;
+    transform: translateX(-110%);
+    transition: transform 0.28s ease;
+    z-index: 45;
+  }
+
+  body.mobile-nav-open .app-sidebar {
+    transform: translateX(0);
+  }
+
+  body.mobile-nav-open {
+    overflow: hidden;
   }
 
   .app-main {

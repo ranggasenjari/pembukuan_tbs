@@ -56,8 +56,43 @@ function defaultOcrSettings() {
     webhook_key: '',
     mistral_api_key: '',
     mistral_prompt: DEFAULT_MISTRAL_PROMPT,
-    mistral_output_schema: JSON.stringify(DEFAULT_MISTRAL_SCHEMA, null, 2)
+    mistral_output_schema: JSON.stringify(DEFAULT_MISTRAL_SCHEMA, null, 2),
+    factory_settings: {}
   };
+}
+
+function normalizeFactorySettings(value) {
+  const map = {};
+  if (Array.isArray(value)) {
+    value.forEach((raw) => {
+      if (!raw || typeof raw !== 'object') return;
+      const id = raw.factory_id || raw.id;
+      if (!id) return;
+      map[id] = {
+        factory_id: id,
+        factory_name: raw.factory_name || null,
+        prompt: typeof raw.prompt === 'string' ? raw.prompt : (raw.prompt ? JSON.stringify(raw.prompt) : null),
+        output_schema: typeof raw.output_schema === 'string'
+          ? raw.output_schema
+          : (raw.output_schema ? JSON.stringify(raw.output_schema, null, 2) : null)
+      };
+    });
+  } else if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([key, raw]) => {
+      if (!raw || typeof raw !== 'object') return;
+      const id = raw.factory_id || raw.id || key;
+      if (!id) return;
+      map[id] = {
+        factory_id: id,
+        factory_name: raw.factory_name || null,
+        prompt: typeof raw.prompt === 'string' ? raw.prompt : (raw.prompt ? JSON.stringify(raw.prompt) : null),
+        output_schema: typeof raw.output_schema === 'string'
+          ? raw.output_schema
+          : (raw.output_schema ? JSON.stringify(raw.output_schema, null, 2) : null)
+      };
+    });
+  }
+  return map;
 }
 
 function normalizeOcrSettings(value = {}) {
@@ -70,7 +105,8 @@ function normalizeOcrSettings(value = {}) {
     mistral_prompt: value.mistral_prompt || defaults.mistral_prompt,
     mistral_output_schema: typeof value.mistral_output_schema === 'string'
       ? value.mistral_output_schema
-      : JSON.stringify(value.mistral_output_schema || DEFAULT_MISTRAL_SCHEMA, null, 2)
+      : JSON.stringify(value.mistral_output_schema || DEFAULT_MISTRAL_SCHEMA, null, 2),
+    factory_settings: normalizeFactorySettings(value.factory_settings)
   };
 }
 
@@ -93,6 +129,42 @@ async function getOcrSettings(supabase) {
   return normalizeOcrSettings(result.data?.value || {});
 }
 
+function parseFormFactorySettings(body, current = defaultOcrSettings()) {
+  const existing = current.factory_settings || {};
+  const map = { ...existing };
+  const rawMap = body.factory_settings;
+
+  if (rawMap && typeof rawMap === 'object') {
+    Object.entries(rawMap).forEach(([key, raw]) => {
+      if (!raw || typeof raw !== 'object') return;
+      const id = raw.factory_id || key;
+      if (!id) return;
+      const prompt = String(raw.prompt || '').trim();
+      const outputSchema = String(raw.output_schema || '').trim();
+      if (prompt || outputSchema || raw.remove) {
+        if (raw.remove) {
+          delete map[id];
+          return;
+        }
+        if (prompt || outputSchema) {
+          map[id] = {
+            factory_id: id,
+            factory_name: raw.factory_name || map[id]?.factory_name || null,
+            prompt: prompt || null,
+            output_schema: outputSchema || null
+          };
+        }
+      }
+    });
+  }
+
+  // Hapus entri yang ditandai remove di dalam list (checkbox-posted array)
+  const removed = Array.isArray(body.factory_settings_remove) ? body.factory_settings_remove : [];
+  removed.forEach((id) => { if (id) delete map[id]; });
+
+  return map;
+}
+
 function settingsFromBody(body, current = defaultOcrSettings()) {
   const next = {
     mode: body.mode === OCR_MODES.INTERNAL ? OCR_MODES.INTERNAL : OCR_MODES.WEBHOOK,
@@ -100,7 +172,8 @@ function settingsFromBody(body, current = defaultOcrSettings()) {
     webhook_key: String(body.webhook_key || '').trim() || current.webhook_key || '',
     mistral_api_key: String(body.mistral_api_key || '').trim() || current.mistral_api_key || '',
     mistral_prompt: String(body.mistral_prompt || '').trim(),
-    mistral_output_schema: String(body.mistral_output_schema || '').trim()
+    mistral_output_schema: String(body.mistral_output_schema || '').trim(),
+    factory_settings: parseFormFactorySettings(body, current)
   };
 
   return normalizeOcrSettings(next);
@@ -120,7 +193,9 @@ module.exports = {
   OCR_MODES,
   defaultOcrSettings,
   getOcrSettings,
+  normalizeFactorySettings,
   normalizeOcrSettings,
+  parseFormFactorySettings,
   saveOcrSettings,
   settingsFromBody
 };

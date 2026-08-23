@@ -16,6 +16,10 @@
     <dt>Nama</dt><dd><%= paymentRelation.name %></dd>
     <dt>Kontak</dt><dd><%= paymentRelation.contact || '-' %></dd>
     <dt>Alamat / Asal</dt><dd><%= paymentRelation.address || '-' %></dd>
+    <dt>Fee</dt><dd><%= paymentRelation.fee != null ? format.currency(paymentRelation.fee) : '-' %></dd>
+    <dt>Potongan BP</dt><dd><%= paymentRelation.potongan_bp != null ? format.currency(paymentRelation.potongan_bp) : '-' %></dd>
+    <dt>Harga / Kg</dt><dd><%= paymentRelation.harga != null ? format.number(paymentRelation.harga) : '-' %></dd>
+    <dt>Uang Minum</dt><dd><%= paymentRelation.uang_minum != null ? format.currency(paymentRelation.uang_minum) : '-' %></dd>
     <dt>Catatan</dt><dd><%= paymentRelation.notes || '-' %></dd>
   </dl>
 </section>
@@ -46,6 +50,51 @@
             <small><%= account.account_number || '-' %> - <%= account.account_name || '-' %></small>
           </span>
         </div>
+      <% }) %>
+    </div>
+  </section>
+</div>
+
+<div class="grid gap-5 lg:grid-cols-2 mt-5">
+  <section class="form-card">
+    <h2>Hutang</h2>
+    <% const hutang = paymentRelation.payment_relation_hutang || []; %>
+    <% if (!hutang.length) { %><p class="empty">Belum ada data hutang.</p><% } %>
+    <div class="space-y-3">
+      <% hutang.forEach((row) => { %>
+        <div class="select-row">
+          <span>
+            <strong><%= format.currency(row.amount) %></strong>
+            <small><%= format.date(row.tanggal) %><%= row.notes ? ` — ${row.notes}` : '' %></small>
+          </span>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <h2>Rolling</h2>
+    <% const rolling = paymentRelation.payment_relation_rolling || []; %>
+    <% if (!rolling.length) { %><p class="empty">Belum ada data rolling.</p><% } %>
+    <div class="space-y-3">
+      <% rolling.forEach((row) => { %>
+        <div class="select-row">
+          <span>
+            <strong><%= format.currency(row.amount) %></strong>
+            <small><%= format.date(row.tanggal) %><%= row.notes ? ` — ${row.notes}` : '' %></small>
+          </span>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="form-card lg:col-span-2">
+    <h2>Giringan</h2>
+    <% const giringan = paymentRelation.payment_relation_giringan || []; %>
+    <% if (!giringan.length) { %><p class="empty">Belum ada nama giringan.</p><% } %>
+    <div class="space-y-3">
+      <% giringan.forEach((row) => { %>
+        <div class="select-row"><span><strong><%= row.name %></strong></span></div>
       <% }) %>
     </div>
   </section>

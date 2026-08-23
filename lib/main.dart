@@ -2,26 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'features/home/home_screen.dart';
-import 'features/auth/login_screen.dart';
 import 'core/services/sharing_service.dart';
+import 'core/widgets/offline_status_banner.dart';
+import 'core/widgets/startup_gate.dart';
 import 'features/bons/bon_entry_screen.dart';
 import 'config/env_config.dart';
+import 'offline/offline_coordinator.dart';
+import 'offline/offline_session_service.dart';
+import 'providers/providers.dart';
 import 'dart:io';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
 
   // Initialize Supabase with environment configuration
-  // Credentials should be passed via --dart-define during build/run:
-  // flutter run \
-  //   --dart-define=SUPABASE_URL=https://your-project.supabase.co \
-  //   --dart-define=SUPABASE_ANON_KEY=your-anon-key \
-  //   --dart-define=SUPABASE_SCHEMA=inv
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
@@ -30,22 +28,47 @@ void main() async {
     ),
   );
 
-  runApp(const ProviderScope(child: MyApp()));
+  // Mesin offline/online (SQLCipher + antrean sinkron + konektivitas).
+  final coordinator = SyncCoordinator(
+    OfflineSessionService(),
+    ConnectivityService(),
+    Supabase.instance.client,
+  );
+
+  // Tampilkan splash secepat mungkin; StartupGate menentukan layar tujuan.
+  runApp(
+    ProviderScope(
+      overrides: [
+        coordinatorProvider.overrideWithValue(coordinator),
+      ],
+      child: const MyApp(),
+    ),
+  );
 
   // Initialize Sharing Service
   SharingService().init(
-    onSharingReceived: (List<SharedMediaFile> files) {
-      if (files.isNotEmpty) {
-        final path = files.first.path;
-        if (path.isNotEmpty) {
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => BonEntryScreen(initialImage: File(path)),
-            ),
-          );
-        }
-      }
+    onSharingReceived: (List<SharedMediaFile> files) async {
+      if (files.isEmpty) return;
+      final path = files.first.path;
+      if (path.isEmpty) return;
+      await _openBonFromSharedFile(File(path));
     },
+  );
+}
+
+/// Membuka form bon dari gambar yang di-share ke aplikasi.
+/// Menunggu StartupGate selesai agar push tidak ditimpa layar awal.
+Future<void> _openBonFromSharedFile(File file) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (!appStartupReady.value && DateTime.now().isBefore(deadline)) {
+    await Future.delayed(const Duration(milliseconds: 150));
+  }
+  final nav = navigatorKey.currentState;
+  if (nav == null) return;
+  nav.push(
+    MaterialPageRoute(
+      builder: (context) => BonEntryScreen(initialImage: file),
+    ),
   );
 }
 
@@ -98,9 +121,11 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: Supabase.instance.client.auth.currentSession == null
-          ? const LoginScreen()
-          : const HomeScreen(),
+      builder: (context, child) => OfflineStatusBanner(
+        coordinator: ProviderScope.containerOf(context).read(coordinatorProvider),
+        child: child ?? const SizedBox.shrink(),
+      ),
+      home: const StartupGate(),
     );
   }
 }

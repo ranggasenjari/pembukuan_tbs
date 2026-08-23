@@ -27,6 +27,7 @@
       </thead>
       <tbody>
         <% history.forEach((item) => { %>
+          <% const safeName = String(item.factories?.name || 'semua').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'factory'; %>
           <tr>
             <td><%= format.date(item.date) %></td>
             <td><%= format.dateTime(item.printed_at) %></td>
@@ -34,8 +35,13 @@
             <td class="text-right"><%= format.number(item.total_bons) %></td>
             <td class="text-right"><%= format.number(item.total_tonase) %> ton</td>
             <td class="text-right"><%= format.currency(item.total_amount) %></td>
-            <td>
-              <a href="<%= url(`/reports/harian/${item.id}/pdf`) %>" target="_blank" class="btn-primary small">Unduh PDF</a>
+            <td class="text-right whitespace-nowrap">
+              <a href="<%= url(`/reports/harian/${item.id}/pdf`) %>" class="btn-primary small">Unduh PDF</a>
+              <button type="button"
+                class="btn-secondary small"
+                data-print-pdf="<%= url(`/reports/harian/${item.id}/print`) %>"
+                data-print-status="<%= url(`/reports/harian/${item.id}/print-status`) %>"
+                data-filename="cetakan-harian-<%= item.date %>-<%= safeName %>.pdf">Print</button>
             </td>
           </tr>
         <% }) %>
@@ -44,4 +50,38 @@
   </div>
   <% } %>
 </section>
+
+<dialog id="print-status-dialog" class="rounded-xl shadow-xl p-6 max-w-lg">
+  <h3 class="text-lg font-bold mb-1">Cetak Rekap Harian</h3>
+  <p class="text-sm text-slate-500 mb-4">Mengirim PDF ke server printer di latar belakang.</p>
+  <div id="print-modal-status" class="print-status-box">
+    <span class="print-spinner"></span>
+    <span id="print-modal-text">Menyiapkan cetak...</span>
+  </div>
+  <div class="space-y-2 mt-4">
+    <div class="print-status-line"><span class="print-status-label">File</span><span id="print-filename">-</span></div>
+    <div class="print-status-line"><span class="print-status-label">Job</span><span id="print-job-id">-</span></div>
+    <div class="print-status-line"><span class="print-status-label">Ukuran</span><span id="print-paper">-</span></div>
+    <div class="print-status-line"><span class="print-status-label">Printer</span><span id="print-lpstat">-</span></div>
+    <div class="print-status-line"><span class="print-status-label">Job Aktif</span><span id="print-active-jobs">-</span></div>
+  </div>
+  <div class="flex gap-2 mt-5 justify-end">
+    <button type="button" id="confirm-print" class="btn-primary" style="display:none">YA</button>
+    <button type="button" id="close-print-dialog" class="btn-secondary">Tutup</button>
+  </div>
+</dialog>
+
+<style>
+  .print-status-box { align-items:center; background:#eef6ff; border:1px solid #bfdbfe; border-radius:10px; color:#1e3a5f; display:flex; font-size:.9rem; font-weight:700; gap:10px; padding:12px 14px; }
+  .print-status-box.is-error { background:#fff1f2; border-color:#fecdd3; color:#be123c; }
+  .print-status-box.is-success { background:#ecfdf5; border-color:#a7f3d0; color:#065f46; }
+  .print-status-box.is-sending { background:#fffbeb; border-color:#fde68a; color:#92400e; }
+  .print-status-line { display:grid; font-size:.82rem; gap:8px; grid-template-columns:90px 1fr; }
+  .print-status-label { color:var(--muted, #64748b); font-size:.68rem; font-weight:800; letter-spacing:.04em; padding-top:2px; text-transform:uppercase; }
+  .print-spinner { animation:print-spin 0.8s linear infinite; border:3px solid #bfdbfe; border-radius:50%; border-top-color:#2563eb; display:inline-block; height:16px; width:16px; }
+  .print-status-box.is-error .print-spinner, .print-status-box.is-success .print-spinner, .print-status-box.is-sending .print-spinner { display:none; }
+  @keyframes print-spin { to { transform:rotate(360deg); } }
+</style>
+
+<script src="<%= url('/js/cetak-print.js') %>"></script>
 <%- include('../partials/footer') %>

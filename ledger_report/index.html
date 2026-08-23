@@ -9,6 +9,8 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
 
+        .subnota-row { background: rgba(217, 70, 239, 0.05); }
+
         body {
             /* font-family: 'Inter', sans-serif; */
         }
@@ -389,6 +391,21 @@
                             </td>
                         </tr>
                     `;
+
+                    (bon.sub_notas || []).forEach((sub) => {
+                        html += `
+                        <tr class="subnota-row transition">
+                            <td class="p-4 border-r border-slate-700/30"></td>
+                            <td class="p-4 border-r border-slate-700/30 text-fuchsia-300 text-lg font-bold">&#8618; ${sub.name}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-slate-500">Sub Nota</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right text-slate-300">${Number(sub.netto_2).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right text-slate-400">Rp ${Number(sub.price_per_kg).toLocaleString('id-ID')}</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right text-slate-300">Rp 0</td>
+                            <td class="p-4 border-r border-slate-700/30 text-right text-fuchsia-300 text-lg font-black">${formatCurrency(sub.amount || 0)}</td>
+                            <td class="p-4 text-center"></td>
+                        </tr>
+                    `;
+                    });
                 });
 
                 html += `</tbody></table></div></div>`;
@@ -441,7 +458,11 @@
 
                 let marginFirstRow = true;
                 const payments = margin.payments || [];
-                const totalRows = payments.reduce((acc, p) => acc + (p.notas?.nota_items?.length || 0), 0);
+                const totalRows = payments.reduce((acc, p) => {
+                    const invoice = p.notas;
+                    const bList = (invoice?.nota_items || []).map(i => i.bons).filter(b => b != null);
+                    return acc + bList.reduce((s, b) => s + 1 + ((b.sub_notas || []).length), 0);
+                }, 0);
 
                 payments.forEach(payment => {
                     const invoice = payment.notas;
@@ -449,6 +470,7 @@
                     bList.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
                     let invFirstRow = true;
+                    const invRows = bList.reduce((s, b) => s + 1 + ((b.sub_notas || []).length), 0);
 
                     bList.forEach((bon, idx) => {
                         const unloading = Number(bon.biaya_bongkar || 0) * Number(bon.netto_1 || 0);
@@ -480,7 +502,7 @@
                         if (invFirstRow) {
                             groupTotalPaymentNota += Number(payment.amount_paid || 0);
                             html += `
-                            <td class="border-r border-slate-700/30 text-right font-bold text-slate-300 align-middle py-6 px-4" rowspan="${bList.length}">
+                            <td class="border-r border-slate-700/30 text-right font-bold text-slate-300 align-middle py-6 px-4" rowspan="${invRows}">
                                 <div class="text-lg">${formatCurrency(payment.amount_paid)}</div>
                                 <div class="text-xs font-mono text-slate-500 mt-1 uppercase tracking-widest">${invoice?.invoice_number}</div>
                             </td>
@@ -507,6 +529,19 @@
                             marginFirstRow = false;
                         }
                         html += '</tr>';
+
+                        (bon.sub_notas || []).forEach((sub) => {
+                            html += `
+                            <tr class="subnota-row transition">
+                                <td class="border-r border-slate-700/30"></td>
+                                <td class="border-r border-slate-700/30 text-fuchsia-300 text-lg font-bold">&#8618; ${sub.name}</td>
+                                <td class="border-r border-slate-700/30 text-slate-500">Sub Nota</td>
+                                <td class="border-r border-slate-700/30 text-right text-slate-300">${Number(sub.netto_2).toLocaleString('id-ID')}</td>
+                                <td class="border-r border-slate-700/30 text-right text-slate-400">Rp ${Number(sub.price_per_kg).toLocaleString('id-ID')}</td>
+                                <td class="border-r border-slate-700/30 text-right text-slate-300">Rp 0</td>
+                            </tr>
+                            `;
+                        });
                     });
                 });
 

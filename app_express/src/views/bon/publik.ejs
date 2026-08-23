@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 text-slate-900">
+  <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto max-w-5xl px-3 py-2">
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <div class="flex items-baseline gap-2"><p class="text-[10px] font-semibold uppercase tracking-widest text-blue-600">Operasional</p><h1 class="text-sm font-black">Update Bon</h1></div>
+        <span class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600"><%= today %></span>
+      </div>
+      <div id="factory-toggles" class="mb-2 flex gap-1.5 overflow-x-auto pb-1"><button type="button" data-factory-id="" class="factory-toggle shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white">Semua pabrik</button><% factories.forEach((factory) => { %><button type="button" data-factory-id="<%= factory.id %>" class="factory-toggle shrink-0 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600"><%= factory.name %></button><% }) %></div>
+      <div>
+        <input id="search" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="Cari plat, relasi, atau driver">
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-5xl px-3 py-2">
+    <div id="empty" class="hidden rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Tidak ada bon yang cocok.</div>
+    <div id="deck"></div>
+    <div id="pager" class="mt-2 flex items-center justify-between gap-2 rounded-xl bg-white p-2 shadow-sm">
+      <button id="prev" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">← Sebelumnya</button>
+      <span id="counter" class="text-xs font-bold text-slate-600"></span>
+      <button id="next" class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Berikutnya →</button>
+    </div>
+  </main>
+
+  <div id="photo-modal"><button type="button" id="photo-modal-close" class="absolute right-4 top-4 rounded-full bg-white/10 px-3 py-1.5 text-sm font-bold text-white hover:bg-white/20">✕</button><img id="photo-modal-img" class="max-h-[90vh] max-w-[92vw] rounded-lg shadow-2xl" alt="Foto bon"></div>
+
+  <div id="relation-modal"><div class="relation-card rounded-xl bg-white p-4 shadow-2xl"><div class="flex items-center justify-between"><h3 class="text-sm font-black text-slate-900">Tambah Relasi Bayar</h3><button type="button" id="relation-modal-close" class="rounded-md px-2 py-0.5 text-lg font-bold text-slate-400 hover:text-slate-700">✕</button></div><form id="relation-form" class="mt-3 grid gap-2"><div class="grid grid-cols-2 gap-2"><label class="field"><span>Nama Relasi Bayar</span><input required name="name" class="input uppercase" placeholder="Contoh: CV MITRA JAYA"></label><label class="field"><span>Kontak</span><input name="contact" class="input" placeholder="No. HP / WA"></label></div><label class="field"><span>Alamat / Asal</span><input name="address" class="input uppercase" placeholder="Alamat"></label><label class="field"><span>Catatan</span><input name="notes" class="input" placeholder="Catatan (opsional)"></label><div class="grid grid-cols-3 gap-2"><label class="field"><span>Bank</span><input name="bank_name" class="input uppercase" placeholder="Nama Bank"></label><label class="field"><span>No Rekening</span><input name="account_number" class="input" placeholder="No Rekening"></label><label class="field"><span>Nama Rekening</span><input name="account_name" class="input uppercase" placeholder="Nama Rekening"></label></div><div class="mt-1 flex justify-end gap-2"><button type="button" id="relation-cancel" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600">Batal</button><button type="submit" id="relation-submit" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">Simpan &amp; Hubungkan</button></div></form></div></div>
+
+  <template id="card-template">
+    <article class="bon-card rounded-xl bg-white p-3 shadow-sm">
+      <div class="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+        <div class="flex min-w-0 items-center gap-2"><button type="button" class="view-photo hidden shrink-0 rounded-lg border border-slate-300 bg-slate-50 p-1.5 text-slate-500 hover:text-blue-600" title="Lihat foto bon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></button><div class="min-w-0"><div class="flex items-baseline gap-2"><h2 class="plate truncate text-lg font-black"></h2><p class="driver truncate text-xs text-slate-500"></p></div><p class="ticket text-[10px] font-bold uppercase tracking-wider text-slate-400"></p></div></div>
+        <div class="shrink-0 text-right"><span class="status inline-block rounded-full px-2 py-1 text-[10px] font-bold"></span><p class="payment-relation mt-1 max-w-32 truncate text-[10px] text-slate-500"></p></div>
+      </div>
+      <div class="grid grid-cols-3 gap-1.5 sm:gap-3">
+        <label class="field col-span-2"><span>Relasi</span><select name="relation_agent_id" class="input"><option value="">— Pilih Relasi —</option><% relationAgents.forEach((agent) => { %><option value="<%= agent.id %>"><%= agent.name %></option><% }) %></select></label>
+        <label class="field"><span>Plat</span><input name="plate_number" class="input uppercase"></label>
+        <label class="field"><span>Driver</span><input name="driver_name" class="input uppercase"></label>
+        <label class="field"><span>N1</span><input name="netto_1" type="number" class="input"></label>
+        <label class="field"><span>N2</span><input name="netto_2" type="number" class="input"></label>
+        <label class="field"><span>Harga</span><input name="price" type="number" class="input"></label>
+        <label class="field"><span>SPSI</span><select name="factory_spsi_type_id" class="input spsi"><option value="">-</option></select></label>
+        <label class="field"><span>U. Minum</span><input name="uang_minum" type="number" class="input"></label>
+        <div class="col-span-3 grid grid-cols-3 gap-1.5 sm:gap-3">
+          <label class="field"><span>DP</span><input name="dp" type="number" class="input"></label>
+          <div class="field col-span-2"><span>BP · PPh</span><div class="flex items-center gap-2"><div class="grid grid-cols-5 gap-1 flex-1"><% [0, 50000, 70000, 100000, 150000].forEach((value) => { %><button type="button" class="bp rounded-md border border-slate-300 px-1 py-1.5 text-[10px] font-bold" data-value="<%= value %>"><%= value / 1000 %>k</button><% }) %></div><button type="button" class="pph shrink-0 rounded-md border border-slate-300 px-2 py-1.5 text-[10px] font-bold" data-enabled="0">PPh OFF</button></div><input type="hidden" name="bp_colt"></div>
+        </div>
+        <label class="field col-span-3"><span>Catatan</span><input name="notes" class="input"></label>
+      </div>
+      <section class="mt-2 rounded-lg bg-slate-50 px-2 py-1.5"><div class="flex items-center justify-between text-[11px] font-bold text-slate-600"><span>Potongan lain</span><button type="button" class="add-ded text-[11px] font-bold text-blue-600">+ Tambah</button></div><div class="mt-1 deductions space-y-1"></div></section>
+      <div class="mt-2 grid grid-cols-[1fr_auto] items-center gap-2 border-t border-slate-100 pt-2"><div class="flex items-center gap-1"><strong class="total text-lg text-blue-700"></strong><button type="button" class="copy-total copy-button" title="Salin total">Salin</button></div><button type="button" class="save rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Simpan</button></div>
+      <div class="mt-2 grid grid-cols-2 gap-2"><button type="button" class="wa rounded-lg border border-emerald-600 px-2 py-2 text-xs font-bold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">WA</button><button type="button" class="settle rounded-lg bg-amber-400 px-2 py-2 text-xs font-bold text-amber-950 disabled:cursor-not-allowed disabled:opacity-40">Nota selesai</button></div>
+      <section class="payment-info mt-2 hidden rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2 text-[11px] text-emerald-950"><div class="payment-details"><p class="payment-name font-black"></p><p class="payment-contact flex items-center gap-1 text-emerald-800"><span class="payment-contact-value"></span><button type="button" class="copy-contact copy-button" title="Salin kontak">Salin</button><button type="button" class="wa-contact" title="Buka chat WhatsApp">Chat WA</button></p><div class="payment-accounts mt-1 space-y-1"></div></div><button type="button" class="add-relation hidden w-full rounded-lg border border-dashed border-emerald-400 bg-white px-2 py-1.5 text-[11px] font-bold text-emerald-700">+ Relasi Bayar</button></section>
+    </article>
+  </template>
+
+  <script>
+    const BASE = <%- JSON.stringify(basePath || '') %>;
+    const factories = <%- JSON.stringify(factories).replace(/</g, '\\u003c') %>;
+    const items = <%- JSON.stringify(items).replace(/</g, '\\u003c') %>;
+    const rupiah = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
+    const deck = document.querySelector('#deck'), empty = document.querySelector('#empty'), pager = document.querySelector('#pager');
+    let filtered = [...items], index = 0, selectedFactoryId = '';
+    const appUrl = (path) => BASE + path;
+    const field = (card, name) => card.querySelector(`[name="${name}"]`);
+    const copyText = async (button, value) => { try { await navigator.clipboard.writeText(value); const text = button.textContent; button.textContent = 'Tersalin'; setTimeout(() => { button.textContent = text; }, 1000); } catch { alert('Tidak dapat menyalin teks.'); } };
+    const waNumber = (value) => { const s = String(value || '').replace(/\D/g, ''); if (s.startsWith('0')) return '62' + s.slice(1); if (s.startsWith('62')) return s; return s; };
+    const photoModal = document.querySelector('#photo-modal'); const photoModalImg = document.querySelector('#photo-modal-img');
+    const openPhoto = (src) => { if (!src) return; photoModalImg.src = src; photoModal.classList.add('open'); document.body.style.overflow = 'hidden'; };
+    const closePhoto = () => { photoModal.classList.remove('open'); document.body.style.overflow = ''; };
+    document.querySelector('#photo-modal-close').onclick = closePhoto;
+    photoModal.addEventListener('click', (e) => { if (e.target === photoModal) closePhoto(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePhoto(); });
+    const relationModal = document.querySelector('#relation-modal'); const relationForm = document.querySelector('#relation-form'); const relationSubmit = document.querySelector('#relation-submit'); let relationBonId = null;
+    const openRelationModal = (bon) => { relationBonId = bon.id; relationForm.reset(); relationModal.classList.add('open'); document.body.style.overflow = 'hidden'; };
+    const closeRelationModal = () => { relationModal.classList.remove('open'); document.body.style.overflow = ''; };
+    document.querySelector('#relation-modal-close').onclick = closeRelationModal;
+    document.querySelector('#relation-cancel').onclick = closeRelationModal;
+    relationModal.addEventListener('click', (e) => { if (e.target === relationModal) closeRelationModal(); });
+    relationForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = String(relationForm.querySelector('[name="name"]')?.value || '').trim();
+      if (!name) { alert('Nama relasi bayar wajib diisi.'); return; }
+      relationSubmit.disabled = true; relationSubmit.textContent = 'Menyimpan…';
+      try {
+        const res = await fetch(appUrl(`/api/bon/publik/${relationBonId}/payment-relation/new`), { method: 'POST', headers: { Accept: 'application/json' }, body: new URLSearchParams(new FormData(relationForm)) });
+        const result = await res.json();
+        if (!res.ok || !result.ok) throw new Error(result.error || 'Gagal menyimpan relasi bayar.');
+        location.reload();
+      } catch (error) {
+        alert(error.message);
+        relationSubmit.disabled = false; relationSubmit.textContent = 'Simpan & Hubungkan';
+      }
+    });
+    const deductionRow = (deduction = {}) => {
+      const row = document.createElement('div'); row.className = 'grid grid-cols-[1fr_120px_auto] gap-2';
+      row.innerHTML = `<input name="deduction_label" class="input" placeholder="Label"><input name="deduction_amount" type="number" class="input" placeholder="Rp"><button type="button" class="remove-ded rounded-lg px-2 text-lg font-bold text-rose-600">×</button>`;
+      field(row, 'deduction_label').value = deduction.label || ''; field(row, 'deduction_amount').value = deduction.amount || '';
+      row.querySelector('.remove-ded').onclick = () => { const card = row.closest('.bon-card'); row.remove(); recalc(card); };
+      row.querySelectorAll('input').forEach((input) => input.oninput = () => recalc(row.closest('.bon-card')));
+      return row;
+    };
+    const recalc = (card) => {
+      const number = (name) => Number(field(card, name)?.value || 0);
+      const n1 = number('netto_1'), n2 = number('netto_2'), price = number('price'), dp = number('dp'), bp = number('bp_colt'), um = number('uang_minum');
+      const spsi = card.querySelector('.spsi option:checked'); const rate = Number(spsi?.dataset.rate || 0); const spsiAmount = spsi?.dataset.mode === 'FIX' ? rate : rate * n1;
+      const zeroPphUm = card.dataset.factoryId === 'a536e3c0-7ea0-4003-9df0-c38721a9439b' || card.dataset.factoryId === '376b98eb-0eb4-4a4e-84aa-902429f85669';
+      const pph = zeroPphUm ? 0 : (card.querySelector('.pph').dataset.enabled === '1' ? Math.floor(.0025 * price * n2) : 0);
+      const deductions = [...card.querySelectorAll('[name="deduction_amount"]')].reduce((sum, input) => sum + Number(input.value || 0), 0);
+      card.querySelector('.total').textContent = rupiah(price * n2 - dp - bp - (zeroPphUm ? 0 : um) - pph - spsiAmount - deductions);
+    };
+    const statusClass = (status) => status === 'TERTAGIH' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700';
+    function render() {
+      deck.innerHTML = ''; const item = filtered[index]; empty.classList.toggle('hidden', !!item); pager.classList.toggle('hidden', !item);
+      if (!item) return;
+      const card = document.querySelector('#card-template').content.firstElementChild.cloneNode(true), bon = item.bon;
+      card.querySelector('.ticket').textContent = `Tiket ${bon.ticket_number || '-'}`; card.querySelector('.plate').textContent = bon.plate_number || '-'; card.querySelector('.driver').textContent = bon.driver_name || 'Tanpa driver';
+      const status = card.querySelector('.status'); status.textContent = bon.status === 'TERTAGIH' ? 'Menunggu pembayaran' : 'Belum nota'; status.className += ' ' + statusClass(bon.status);
+      card.dataset.factoryId = bon.factory_id || ''; card.querySelector('.payment-relation').textContent = item.paymentRelation ? `Relasi bayar: ${item.paymentRelation.name}` : '';
+      const viewPhoto = card.querySelector('.view-photo'); viewPhoto.classList.toggle('hidden', !bon.image_url); viewPhoto.onclick = () => openPhoto(bon.image_url);
+      if (item.paymentRelation) {
+        const paymentInfo = card.querySelector('.payment-info'); const relation = item.paymentRelation;
+        paymentInfo.classList.remove('hidden'); card.querySelector('.payment-details').classList.remove('hidden'); card.querySelector('.add-relation').classList.add('hidden'); card.querySelector('.payment-name').textContent = relation.name || 'Relasi bayar';
+        const contact = relation.contact || ''; card.querySelector('.payment-contact-value').textContent = `Kontak: ${contact || '-'}`;
+        const copyContact = card.querySelector('.copy-contact'); copyContact.classList.toggle('hidden', !contact); copyContact.onclick = () => copyText(copyContact, contact);
+        const waContact = card.querySelector('.wa-contact'); waContact.classList.toggle('hidden', !contact); waContact.onclick = () => { if (contact) window.open(`https://wa.me/${waNumber(contact)}`, '_blank', 'noopener,noreferrer'); };
+        const accounts = relation.payment_relation_accounts || [];
+        card.querySelector('.payment-accounts').replaceChildren(...accounts.map((account) => {
+          const row = document.createElement('p'); row.className = 'flex items-center gap-1';
+          const label = document.createElement('span'); label.textContent = [account.bank_name, account.account_number, account.account_name].filter(Boolean).join(' · ') || 'Rekening: -'; row.append(label);
+          if (account.account_number) { const button = document.createElement('button'); button.type = 'button'; button.className = 'copy-button'; button.textContent = 'Salin'; button.title = 'Salin nomor rekening'; button.onclick = () => copyText(button, account.account_number); row.append(button); }
+          return row;
+        }));
+        if (!accounts.length) card.querySelector('.payment-accounts').textContent = 'Rekening: -';
+      } else {
+        card.querySelector('.payment-info').classList.remove('hidden'); card.querySelector('.payment-details').classList.add('hidden'); const addRelation = card.querySelector('.add-relation'); addRelation.classList.remove('hidden'); addRelation.onclick = () => openRelationModal(bon);
+      }
+      ['plate_number','driver_name','netto_1','netto_2','price','uang_minum','dp','bp_colt','notes'].forEach((name) => field(card, name).value = bon[name] ?? '');
+      field(card, 'relation_agent_id').value = bon.relation_agent_id || '';
+      const spsi = card.querySelector('.spsi'); const factory = factories.find((row) => row.id === bon.factory_id); (factory?.factory_spsi_types || []).forEach((type) => { const mode = (type.calculation_mode || 'PER_KG').toUpperCase(); const amount = Number(type.amount || 0); const label = mode === 'FIX' ? `${type.name} — ${rupiah(amount)}` : `${type.name} — ${rupiah(amount)}/kg`; const option = new Option(label, type.id, false, type.id === bon.factory_spsi_type_id); option.dataset.rate = type.amount || 0; option.dataset.mode = type.calculation_mode || 'PER_KG'; spsi.add(option); });
+      const pph = card.querySelector('.pph'); const pphOn = Number(bon.pph || 0) > 0; pph.dataset.enabled = pphOn ? '1' : '0'; pph.textContent = pphOn ? 'PPh ON' : 'PPh OFF'; pph.classList.toggle('bg-blue-600', pphOn); pph.classList.toggle('text-white', pphOn);
+      card.querySelectorAll('.bp').forEach((button) => { button.classList.toggle('bg-blue-600', Number(button.dataset.value) === Number(bon.bp_colt)); button.classList.toggle('text-white', Number(button.dataset.value) === Number(bon.bp_colt)); button.onclick = () => { field(card, 'bp_colt').value = button.dataset.value; card.querySelectorAll('.bp').forEach((b) => { const active = b === button; b.classList.toggle('bg-blue-600', active); b.classList.toggle('text-white', active); }); recalc(card); }; });
+      const deductions = bon.bon_deductions || [];
+      (deductions.length ? deductions : [{}]).forEach((deduction) => card.querySelector('.deductions').append(deductionRow(deduction)));
+      card.querySelector('.add-ded').onclick = () => card.querySelector('.deductions').append(deductionRow());
+      card.querySelectorAll('.input').forEach((input) => input.oninput = () => recalc(card)); spsi.onchange = () => recalc(card); pph.onclick = () => { const on = pph.dataset.enabled !== '1'; pph.dataset.enabled = on ? '1' : '0'; pph.textContent = on ? 'PPh ON' : 'PPh OFF'; pph.classList.toggle('bg-blue-600', on); pph.classList.toggle('text-white', on); recalc(card); };
+      const hasNota = !!item.nota; card.querySelector('.wa').disabled = !hasNota; card.querySelector('.settle').disabled = !hasNota;
+      card.querySelector('.save').onclick = async () => { const payload = {}; card.querySelectorAll('[name]').forEach((input) => { if (input.name && input.value !== '') payload[input.name] = input.value; }); payload.pph_enabled = pph.dataset.enabled; const button = card.querySelector('.save'); button.disabled = true; button.textContent = 'Menyimpan…'; try { const response = await fetch(appUrl(`/api/bon/publik/${bon.id}`), { method: 'PATCH', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) }); const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.error || 'Gagal menyimpan bon'); Object.assign(bon, result.bon); render(); } catch (error) { alert(error.message); button.disabled = false; button.textContent = 'Simpan Bon'; } };
+      card.querySelector('.wa').onclick = async () => { try { const response = await fetch(appUrl(`/api/bon/publik/${bon.id}/wa`)); const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.error || 'Gagal membuat teks WA'); await navigator.clipboard.writeText(result.text); const button = card.querySelector('.wa'); button.textContent = 'Tersalin'; setTimeout(() => button.textContent = 'WA — Salin teks', 1200); } catch (error) { alert(error.message); } };
+      card.querySelector('.settle').onclick = async () => { if (!confirm('Tandai seluruh bon dalam nota ini sebagai lunas tanpa bukti pembayaran?')) return; const button = card.querySelector('.settle'); button.disabled = true; try { const response = await fetch(appUrl(`/api/bon/publik/${bon.id}/nota-selesai`), { method: 'POST', headers: { Accept: 'application/json' } }); const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.error || 'Gagal menyelesaikan nota'); filtered = filtered.filter((row) => row.nota?.id !== item.nota.id); index = Math.min(index, Math.max(filtered.length - 1, 0)); render(); } catch (error) { alert(error.message); button.disabled = false; } };
+      card.querySelector('.copy-total').onclick = () => copyText(card.querySelector('.copy-total'), card.querySelector('.total').textContent);
+      deck.append(card); document.querySelector('#counter').textContent = `Bon ${index + 1} / ${filtered.length}`; document.querySelector('#prev').disabled = index === 0; document.querySelector('#next').disabled = index >= filtered.length - 1; recalc(card);
+    }
+    document.querySelector('#prev').onclick = () => { if (index > 0) { index--; render(); } }; document.querySelector('#next').onclick = () => { if (index < filtered.length - 1) { index++; render(); } };
+    function filter() { const q = document.querySelector('#search').value.trim().toLowerCase(); filtered = items.filter((item) => { const bon = item.bon; const text = [bon.plate_number, bon.driver_name, bon.relation_name, bon.relation_agents?.name].join(' ').toLowerCase(); return (!q || text.includes(q)) && (!selectedFactoryId || bon.factory_id === selectedFactoryId); }); index = 0; render(); }
+    document.querySelector('#search').oninput = filter;
+    document.querySelectorAll('.factory-toggle').forEach((button) => button.onclick = () => { selectedFactoryId = button.dataset.factoryId; document.querySelectorAll('.factory-toggle').forEach((toggle) => { const active = toggle === button; toggle.classList.toggle('bg-blue-600', active); toggle.classList.toggle('text-white', active); toggle.classList.toggle('border-slate-300', !active); toggle.classList.toggle('bg-white', !active); toggle.classList.toggle('text-slate-600', !active); }); filter(); });
+    render();
+  </script>
+  <style>.field{display:grid;gap:.15rem;min-width:0;font-size:10px;font-weight:700;color:#475569}.input{min-width:0;width:100%;border:1px solid #cbd5e1;border-radius:.45rem;padding:.35rem .4rem;background:#fff;font-size:12px;font-weight:500;color:#0f172a}.input:focus{outline:2px solid #93c5fd;border-color:#3b82f6}.copy-button{border:1px solid #86efac;border-radius:.35rem;background:#fff;padding:.12rem .35rem;font-size:10px;font-weight:700;color:#047857;white-space:nowrap}.wa-contact{border:1px solid #16a34a;border-radius:.35rem;background:#16a34a;padding:.12rem .35rem;font-size:10px;font-weight:700;color:#fff;white-space:nowrap}#photo-modal{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;background:rgba(15,23,42,.92);padding:1rem}#photo-modal.open{display:flex}#relation-modal{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;background:rgba(15,23,42,.6);padding:1rem}#relation-modal.open{display:flex}.relation-card{max-width:30rem;width:100%;max-height:90vh;overflow:auto}</style>
+</body>
+</html>

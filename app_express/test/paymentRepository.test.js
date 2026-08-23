@@ -10,12 +10,18 @@ class FakeBuilder {
   }
 
   select() {
-    this.operation = 'select';
+    if (!this.operation) this.operation = 'select';
     return this;
   }
 
   update(payload) {
     this.operation = 'update';
+    this.payload = payload;
+    return this;
+  }
+
+  insert(payload) {
+    this.operation = 'insert';
     this.payload = payload;
     return this;
   }
@@ -55,6 +61,12 @@ class FakeBuilder {
     if (this.operation === 'update') {
       matches.forEach((row) => Object.assign(row, this.payload));
       return { data: matches, error: null };
+    }
+
+    if (this.operation === 'insert') {
+      const inserted = { id: `${this.table}-${rows.length + 1}`, ...this.payload };
+      rows.push(inserted);
+      return { data: [inserted], error: null };
     }
 
     return { data: matches, error: null };
@@ -102,5 +114,34 @@ describe('paymentRepository status transitions', () => {
     });
 
     await expect(paymentRepository.deletePayment(supabase, 'pay-1')).rejects.toThrow('margin');
+  });
+
+  it('settles a nota without proof and marks every related bon LUNAS', async () => {
+    const supabase = new FakeSupabase({
+      payments: [],
+      notas: [{ id: 'nota-1', status: 'TERTAGIH' }],
+      nota_items: [
+        { invoice_id: 'nota-1', bon_id: 'bon-1' },
+        { invoice_id: 'nota-1', bon_id: 'bon-2' }
+      ],
+      bons: [
+        { id: 'bon-1', status: 'TERTAGIH' },
+        { id: 'bon-2', status: 'TERTAGIH' }
+      ]
+    });
+
+    const payment = await paymentRepository.settleNotaWithoutProof(supabase, 'nota-1', {
+      amountPaid: 125000,
+      paymentDate: '2026-08-22'
+    });
+
+    expect(payment).toMatchObject({ invoice_id: 'nota-1', amount_paid: 125000, proof_url: null, margin_id: null });
+    expect(supabase.tables.notas[0].status).toBe('LUNAS');
+    expect(supabase.tables.bons.map((bon) => bon.status)).toEqual(['LUNAS', 'LUNAS']);
+  });
+
+  it('refuses to settle a nota that is already LUNAS', async () => {
+    const supabase = new FakeSupabase({ payments: [], notas: [{ id: 'nota-1', status: 'LUNAS' }], nota_items: [], bons: [] });
+    await expect(paymentRepository.settleNotaWithoutProof(supabase, 'nota-1', { amountPaid: 1 })).rejects.toThrow('sudah lunas');
   });
 });

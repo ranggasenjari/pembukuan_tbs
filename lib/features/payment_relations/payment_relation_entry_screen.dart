@@ -20,7 +20,14 @@ class UpperCaseTextFormatter extends TextInputFormatter {
 
 class PaymentRelationEntryScreen extends ConsumerStatefulWidget {
   final PaymentRelationModel? paymentRelation;
-  const PaymentRelationEntryScreen({super.key, this.paymentRelation});
+
+  /// Kendaraan yang otomatis dicentang saat membuat relasi baru (misal dari layar Kendaraan).
+  final String? initialVehicleId;
+  const PaymentRelationEntryScreen({
+    super.key,
+    this.paymentRelation,
+    this.initialVehicleId,
+  });
 
   @override
   ConsumerState<PaymentRelationEntryScreen> createState() =>
@@ -34,6 +41,10 @@ class _PaymentRelationEntryScreenState
   final _contactController = TextEditingController();
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
+  final _feeController = TextEditingController();
+  final _potonganBpController = TextEditingController();
+  final _hargaController = TextEditingController();
+  final _uangMinumController = TextEditingController();
   final List<
     ({
       TextEditingController bank,
@@ -42,6 +53,23 @@ class _PaymentRelationEntryScreenState
     })
   >
   _accountControllers = [];
+  final List<
+    ({
+      TextEditingController tanggal,
+      TextEditingController amount,
+      TextEditingController notes,
+    })
+  >
+  _hutangControllers = [];
+  final List<
+    ({
+      TextEditingController tanggal,
+      TextEditingController amount,
+      TextEditingController notes,
+    })
+  >
+  _rollingControllers = [];
+  final List<TextEditingController> _giringanControllers = [];
   final Set<String> _selectedVehicleIds = {};
   late Future<List<VehicleOption>> _vehiclesFuture;
   bool _isSaving = false;
@@ -56,6 +84,10 @@ class _PaymentRelationEntryScreenState
       _contactController.text = item.contact ?? '';
       _addressController.text = item.address ?? '';
       _notesController.text = item.notes ?? '';
+      _feeController.text = item.fee?.toString() ?? '';
+      _potonganBpController.text = item.potonganBp?.toString() ?? '';
+      _hargaController.text = item.harga?.toString() ?? '';
+      _uangMinumController.text = item.uangMinum?.toString() ?? '';
       _selectedVehicleIds.addAll(item.vehicles.map((vehicle) => vehicle.vehicleId));
       for (final account in item.accounts) {
         _addAccount(
@@ -64,8 +96,33 @@ class _PaymentRelationEntryScreenState
           name: account.accountName,
         );
       }
+      for (final row in item.hutang) {
+        _addDatedRow(
+          _hutangControllers,
+          tanggal: row.tanggal,
+          amount: row.amount,
+          notes: row.notes,
+        );
+      }
+      for (final row in item.rolling) {
+        _addDatedRow(
+          _rollingControllers,
+          tanggal: row.tanggal,
+          amount: row.amount,
+          notes: row.notes,
+        );
+      }
+      for (final row in item.giringan) {
+        _addGiringan(name: row.name);
+      }
+    }
+    if (widget.initialVehicleId != null) {
+      _selectedVehicleIds.add(widget.initialVehicleId!);
     }
     if (_accountControllers.isEmpty) _addAccount();
+    if (_hutangControllers.isEmpty) _addDatedRow(_hutangControllers);
+    if (_rollingControllers.isEmpty) _addDatedRow(_rollingControllers);
+    if (_giringanControllers.isEmpty) _addGiringan();
   }
 
   @override
@@ -74,10 +131,27 @@ class _PaymentRelationEntryScreenState
     _contactController.dispose();
     _addressController.dispose();
     _notesController.dispose();
+    _feeController.dispose();
+    _potonganBpController.dispose();
+    _hargaController.dispose();
+    _uangMinumController.dispose();
     for (final item in _accountControllers) {
       item.bank.dispose();
       item.number.dispose();
       item.name.dispose();
+    }
+    for (final item in _hutangControllers) {
+      item.tanggal.dispose();
+      item.amount.dispose();
+      item.notes.dispose();
+    }
+    for (final item in _rollingControllers) {
+      item.tanggal.dispose();
+      item.amount.dispose();
+      item.notes.dispose();
+    }
+    for (final item in _giringanControllers) {
+      item.dispose();
     }
     super.dispose();
   }
@@ -92,18 +166,82 @@ class _PaymentRelationEntryScreenState
     });
   }
 
+  void _addDatedRow(
+    List<({TextEditingController tanggal, TextEditingController amount, TextEditingController notes})> list, {
+    DateTime? tanggal,
+    int amount = 0,
+    String? notes,
+  }) {
+    setState(() {
+      list.add((
+        tanggal: TextEditingController(
+          text: tanggal != null
+              ? '${tanggal.year.toString().padLeft(4, '0')}-${tanggal.month.toString().padLeft(2, '0')}-${tanggal.day.toString().padLeft(2, '0')}'
+              : '',
+        ),
+        amount: TextEditingController(text: amount == 0 ? '' : amount.toString()),
+        notes: TextEditingController(text: notes ?? ''),
+      ));
+    });
+  }
+
+  void _addGiringan({String name = ''}) {
+    setState(() {
+      _giringanControllers.add(TextEditingController(text: name));
+    });
+  }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final initial = DateTime.tryParse(controller.text) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null && mounted) {
+      controller.text =
+          '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
       final id = widget.paymentRelation?.id ?? const Uuid().v4();
       final now = DateTime.now();
+
+      List<PaymentRelationDatedRow> buildDatedRows(
+        List<({TextEditingController tanggal, TextEditingController amount, TextEditingController notes})> list,
+      ) {
+        return list
+            .map((item) {
+              final tanggal = DateTime.tryParse(item.tanggal.text) ?? DateTime.now();
+              final amount = int.tryParse(item.amount.text) ?? 0;
+              return PaymentRelationDatedRow(
+                paymentRelationId: id,
+                tanggal: tanggal,
+                amount: amount,
+                notes: item.notes.text.trim().isEmpty
+                    ? null
+                    : item.notes.text.trim(),
+              );
+            })
+            .where((row) => row.amount != 0)
+            .toList();
+      }
+
       final paymentRelation = PaymentRelationModel(
         id: id,
         name: _nameController.text.trim().toUpperCase(),
         contact: _contactController.text.trim(),
         address: _addressController.text.trim().toUpperCase(),
         notes: _notesController.text.trim(),
+        fee: int.tryParse(_feeController.text.trim()),
+        potonganBp: int.tryParse(_potonganBpController.text.trim()),
+        harga: int.tryParse(_hargaController.text.trim()),
+        uangMinum: int.tryParse(_uangMinumController.text.trim()),
         accounts: _accountControllers
             .map(
               (item) => PaymentRelationAccount(
@@ -122,6 +260,17 @@ class _PaymentRelationEntryScreenState
               ),
             )
             .toList(),
+        hutang: buildDatedRows(_hutangControllers),
+        rolling: buildDatedRows(_rollingControllers),
+        giringan: _giringanControllers
+            .map(
+              (item) => PaymentRelationGiringan(
+                paymentRelationId: id,
+                name: item.text.trim().toUpperCase(),
+              ),
+            )
+            .where((row) => row.name.isNotEmpty)
+            .toList(),
         createdAt: widget.paymentRelation?.createdAt ?? now,
         updatedAt: now,
       );
@@ -132,7 +281,7 @@ class _PaymentRelationEntryScreenState
       } else {
         await repo.updatePaymentRelation(paymentRelation);
       }
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, paymentRelation);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -206,10 +355,69 @@ class _PaymentRelationEntryScreenState
               const SizedBox(height: 12),
               _textField(_addressController, 'Alamat / Asal'),
               const SizedBox(height: 12),
+              _numberField(_feeController, 'Fee (Rp)'),
+              const SizedBox(height: 12),
+              _numberField(_potonganBpController, 'Potongan BP (Rp)'),
+              const SizedBox(height: 12),
+              _numberField(_hargaController, 'Harga / Kg (Rp)'),
+              const SizedBox(height: 4),
+              Text(
+                'Kosongkan untuk ikut kendaraan/default. Di luar -100 s.d. 100 = harga tetap; antara -100 s.d. 100 = offset (±) dari harga pabrik.',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 12),
+              _numberField(_uangMinumController, 'Uang Minum (Rp)'),
+              const SizedBox(height: 12),
               _textField(_notesController, 'Catatan', forceUpperCase: false),
             ]),
             const SizedBox(height: 16),
             _vehicleSection(),
+            const SizedBox(height: 16),
+            _datedSection(
+              'Hutang',
+              Icons.request_quote_outlined,
+              _hutangControllers,
+              () => _addDatedRow(_hutangControllers),
+            ),
+            const SizedBox(height: 16),
+            _datedSection(
+              'Rolling',
+              Icons.autorenew_outlined,
+              _rollingControllers,
+              () => _addDatedRow(_rollingControllers),
+            ),
+            const SizedBox(height: 16),
+            _sectionHeader(
+              'Giringan',
+              Icons.groups_outlined,
+              () => _addGiringan(),
+            ),
+            ..._giringanControllers.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(child: _textField(item, 'Nama Giringan')),
+                    if (_giringanControllers.length > 1)
+                      IconButton(
+                        onPressed: () =>
+                            setState(() => _giringanControllers.removeAt(index)),
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          color: Colors.red,
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
             const SizedBox(height: 16),
             _sectionHeader(
               'Rekening',
@@ -279,29 +487,85 @@ class _PaymentRelationEntryScreenState
               style: TextStyle(color: Colors.grey.shade600),
             );
           }
-          return Column(
-            children: vehicles.map((vehicle) {
-              final selected = _selectedVehicleIds.contains(vehicle.id);
-              return CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: selected,
-                title: Text(vehicle.plateNumber),
-                subtitle: Text(vehicle.driverName ?? '-'),
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedVehicleIds.add(vehicle.id);
-                    } else {
-                      _selectedVehicleIds.remove(vehicle.id);
-                    }
-                  });
-                },
-              );
-            }).toList(),
+          final selectedVehicles = vehicles
+              .where((vehicle) => _selectedVehicleIds.contains(vehicle.id))
+              .toList();
+          return InkWell(
+            onTap: _isSaving ? null : () => _openVehiclePicker(vehicles),
+            borderRadius: BorderRadius.circular(12),
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'Kendaraan (pilih beberapa)',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                suffixIcon: const Icon(
+                  Icons.arrow_drop_down,
+                  color: Colors.grey,
+                ),
+              ),
+              child: selectedVehicles.isEmpty
+                  ? Text(
+                      'Ketuk untuk memilih plat / nama supir...',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 13,
+                      ),
+                    )
+                  : Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: selectedVehicles.map((vehicle) {
+                        final driver =
+                            vehicle.driverName?.isNotEmpty == true
+                            ? vehicle.driverName
+                            : null;
+                        return InputChip(
+                          label: Text(
+                            driver != null
+                                ? '${vehicle.plateNumber} — $driver'
+                                : vehicle.plateNumber,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          onDeleted: () {
+                            setState(() {
+                              _selectedVehicleIds.remove(vehicle.id);
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+            ),
           );
         },
       ),
     ]);
+  }
+
+  Future<void> _openVehiclePicker(List<VehicleOption> vehicles) async {
+    final selected = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _VehiclePickerSheet(
+        vehicles: vehicles,
+        selectedIds: _selectedVehicleIds,
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _selectedVehicleIds
+          ..clear()
+          ..addAll(selected);
+      });
+    }
   }
 
   Widget _section(String title, IconData icon, List<Widget> children) {
@@ -399,6 +663,217 @@ class _PaymentRelationEntryScreenState
       validator: required
           ? (value) => value == null || value.isEmpty ? 'Wajib diisi' : null
           : null,
+    );
+  }
+
+  Widget _numberField(TextEditingController controller, String label) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
+      decoration: InputDecoration(
+        labelText: label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+      ),
+    );
+  }
+
+  Widget _dateField(TextEditingController controller, String label) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      onTap: () => _pickDate(controller),
+      decoration: InputDecoration(
+        labelText: label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        suffixIcon: const Icon(Icons.calendar_today, size: 18),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+      ),
+    );
+  }
+
+  Widget _datedSection(
+    String title,
+    IconData icon,
+    List<({TextEditingController tanggal, TextEditingController amount, TextEditingController notes})> list,
+    VoidCallback onAdd,
+  ) {
+    return _section(title, icon, [
+      Align(
+        alignment: Alignment.centerRight,
+        child: OutlinedButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Tambah'),
+        ),
+      ),
+      ...list.asMap().entries.map((entry) {
+        final index = entry.key;
+        final item = entry.value;
+        return Container(
+          margin: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _dateField(item.tanggal, 'Tanggal')),
+                  const SizedBox(width: 8),
+                  Expanded(child: _numberField(item.amount, 'Rp')),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _textField(
+                      item.notes,
+                      'Catatan',
+                      forceUpperCase: false,
+                    ),
+                  ),
+                  if (list.length > 1)
+                    IconButton(
+                      onPressed: () => setState(() => list.removeAt(index)),
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.red,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }),
+    ]);
+  }
+}
+
+class _VehiclePickerSheet extends StatefulWidget {
+  final List<VehicleOption> vehicles;
+  final Set<String> selectedIds;
+
+  const _VehiclePickerSheet({
+    required this.vehicles,
+    required this.selectedIds,
+  });
+
+  @override
+  State<_VehiclePickerSheet> createState() => _VehiclePickerSheetState();
+}
+
+class _VehiclePickerSheetState extends State<_VehiclePickerSheet> {
+  late final Set<String> _selected = Set.of(widget.selectedIds);
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.vehicles.where((vehicle) {
+      final q = _query.trim().toLowerCase();
+      if (q.isEmpty) return true;
+      return vehicle.plateNumber.toLowerCase().contains(q) ||
+          (vehicle.driverName?.toLowerCase().contains(q) ?? false);
+    }).toList();
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            const SizedBox(height: 14),
+            const Text(
+              'Pilih Kendaraan',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Cari plat / nama supir...',
+                  prefixIcon: const Icon(Icons.search),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Tidak ditemukan.',
+                        style: TextStyle(color: Colors.grey.shade500),
+                      ),
+                    )
+                  : ListView(
+                      controller: scrollController,
+                      children: filtered.map((vehicle) {
+                        final checked = _selected.contains(vehicle.id);
+                        return CheckboxListTile(
+                          value: checked,
+                          title: Text(
+                            vehicle.plateNumber,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(vehicle.driverName ?? '-'),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selected.add(vehicle.id);
+                              } else {
+                                _selected.remove(vehicle.id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, _selected),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4318FF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

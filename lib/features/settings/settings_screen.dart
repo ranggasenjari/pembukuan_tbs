@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/factory_model.dart';
 import '../../models/ocr_settings_model.dart';
 import '../../providers/providers.dart';
 
@@ -23,6 +24,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _initialized = false;
   bool _saving = false;
 
+  // Pengaturan prompt/schema per pabrik (Internal OCR)
+  List<FactoryModel> _factories = [];
+  final Map<String, OcrFactorySettings> _factorySettingsMap = {};
+  String? _selectedFactoryId;
+  final _factoryPromptController = TextEditingController();
+  final _factorySchemaController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFactories();
+  }
+
+  Future<void> _loadFactories() async {
+    try {
+      final factories =
+          await ref.read(factoryRepositoryProvider).getFactories();
+      if (!mounted) return;
+      setState(() => _factories = factories);
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _webhookUrlController.dispose();
@@ -30,6 +53,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _mistralApiKeyController.dispose();
     _mistralPromptController.dispose();
     _mistralSchemaController.dispose();
+    _factoryPromptController.dispose();
+    _factorySchemaController.dispose();
     super.dispose();
   }
 
@@ -41,10 +66,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _webhookUrlController.text = settings.webhookUrl;
     _mistralPromptController.text = settings.mistralPrompt;
     _mistralSchemaController.text = settings.mistralOutputSchema;
+    _factorySettingsMap
+      ..clear()
+      ..addAll(settings.factorySettings);
+  }
+
+  void _commitFactoryDraft(String? forFactoryId) {
+    if (forFactoryId == null || forFactoryId.isEmpty) return;
+    final prompt = _factoryPromptController.text.trim();
+    final schema = _factorySchemaController.text.trim();
+    if (prompt.isEmpty && schema.isEmpty) {
+      _factorySettingsMap.remove(forFactoryId);
+      return;
+    }
+    final factory = _factories
+        .where((f) => f.id == forFactoryId)
+        .firstOrNull;
+    final previous = _factorySettingsMap[forFactoryId];
+    _factorySettingsMap[forFactoryId] = OcrFactorySettings(
+      factoryId: forFactoryId,
+      factoryName: factory?.name ?? previous?.factoryName,
+      prompt: prompt.isEmpty ? null : prompt,
+      outputSchema: schema.isEmpty ? null : schema,
+    );
+  }
+
+  void _loadFactoryDraft(String? factoryId) {
+    final settings = factoryId != null
+        ? _factorySettingsMap[factoryId]
+        : null;
+    _factoryPromptController.text = settings?.prompt ?? '';
+    _factorySchemaController.text = settings?.outputSchema ?? '';
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _current == null) return;
+    _commitFactoryDraft(_selectedFactoryId);
+    for (final settings in _factorySettingsMap.values) {
+      final schema = settings.outputSchema;
+      if (schema != null && schema.isNotEmpty) {
+        final prompt = settings.prompt ?? '';
+        if (prompt.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Prompt pabrik "${settings.factoryName ?? settings.factoryId}" wajib diisi bila schema diisi.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+    }
     setState(() => _saving = true);
     try {
       final saved = await ref.read(ocrSettingsRepositoryProvider).saveSettings(
@@ -55,6 +129,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             mistralApiKey: _mistralApiKeyController.text,
             mistralPrompt: _mistralPromptController.text,
             mistralOutputSchema: _mistralSchemaController.text,
+            factorySettings: _factorySettingsMap,
           );
       ref.invalidate(ocrSettingsProvider);
       if (!mounted) return;
@@ -197,6 +272,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ? 'Schema wajib diisi'
                               : null,
                     ),
+                    const SizedBox(height: 24),
+                    _buildFactoryOcrSettings(),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -221,6 +298,150 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Gagal memuat setting: $e')),
       ),
+    );
+  }
+
+  Widget _buildFactoryOcrSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Prompt & Schema Custom per Pabrik',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1B2559),
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Bila bon dari pabrik tertentu punya format berbeda, atur prompt '
+          'dan schema khusus di sini. Saat OCR, bon akan diproses sesuai '
+          'pengaturan pabrik yang dipilih.',
+          style: TextStyle(fontSize: 11, color: Colors.grey),
+        ),
+        const SizedBox(height: 16),
+        if (_factories.isEmpty)
+          const Text(
+            'Memuat daftar pabrik...',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          )
+        else ...[
+          DropdownButtonFormField<String>(
+            key: ValueKey('ocr-factory-$_selectedFactoryId'),
+            initialValue: _selectedFactoryId,
+            isExpanded: true,
+            decoration: _inputDecoration('Pilih Pabrik'),
+            items: [
+              const DropdownMenuItem<String>(
+                value: null,
+                child: Text('Pilih Pabrik'),
+              ),
+              ..._factories.map(
+                (factory) => DropdownMenuItem<String>(
+                  value: factory.id,
+                  child: Text(factory.name, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ],
+            onChanged: (value) {
+              _commitFactoryDraft(_selectedFactoryId);
+              setState(() {
+                _selectedFactoryId = value;
+              });
+              _loadFactoryDraft(value);
+            },
+          ),
+          if (_selectedFactoryId != null) ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _factoryPromptController,
+              decoration: _inputDecoration('Prompt (Pabrik)'),
+              minLines: 5,
+              maxLines: 10,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _factorySchemaController,
+              decoration: _inputDecoration('Output JSON Schema (Pabrik)'),
+              minLines: 10,
+              maxLines: 18,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      _commitFactoryDraft(_selectedFactoryId);
+                      setState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Pengaturan pabrik disimpan sementara',
+                          ),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.save_outlined, size: 18),
+                    label: const Text('Simpan'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      _commitFactoryDraft(_selectedFactoryId);
+                      setState(() {
+                        _factorySettingsMap.remove(_selectedFactoryId);
+                        _selectedFactoryId = null;
+                      });
+                      _loadFactoryDraft(null);
+                    },
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Hapus'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 16),
+          if (_factorySettingsMap.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _factorySettingsMap.values.map((settings) {
+                return InputChip(
+                  label: Text(
+                    settings.factoryName ?? settings.factoryId,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  avatar: const Icon(Icons.factory, size: 16),
+                  onPressed: () {
+                    _commitFactoryDraft(_selectedFactoryId);
+                    setState(() {
+                      _selectedFactoryId = settings.factoryId;
+                    });
+                    _loadFactoryDraft(settings.factoryId);
+                  },
+                  onDeleted: () {
+                    _factorySettingsMap.remove(settings.factoryId);
+                    if (_selectedFactoryId == settings.factoryId) {
+                      _selectedFactoryId = null;
+                      _loadFactoryDraft(null);
+                    }
+                    setState(() {});
+                  },
+                );
+              }).toList(),
+            ),
+        ],
+      ],
     );
   }
 

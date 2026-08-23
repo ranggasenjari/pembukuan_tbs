@@ -1,5 +1,6 @@
 <%- include('../partials/header') %>
 <% const isEdit = !!margin; %>
+<% const defaultFilterDate = isEdit ? '' : today; %>
 <div class="page-head">
   <div>
     <p class="eyebrow">Margin</p>
@@ -9,26 +10,51 @@
 </div>
 <form method="post" action="<%= url(isEdit ? `/margins/${margin.id}?_method=PUT` : '/margins') %>" class="space-y-5">
   <section class="form-card">
-    <div class="flex items-center justify-between">
-      <h2>Pilih Pembayaran</h2>
-      <strong id="payment-total" class="text-emerald-700">Rp 0</strong>
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="!mb-0">Pilih Nota</h2>
+      <div class="text-right">
+        <span class="text-xs text-slate-500">Total Tercentang <small>(termasuk sub nota)</small></span>
+        <strong id="payment-total" class="block text-xl text-emerald-700">Rp 0</strong>
+      </div>
     </div>
+
+    <div class="mgn-filter-bar">
+      <input id="mgn-q" type="search" placeholder="Cari nomor plat..." class="form-input compact" style="width:auto;min-width:170px">
+      <label class="mgn-filter-field"><span class="text-[11px] text-slate-500">Tanggal</span>
+        <input id="mgn-date" type="date" value="<%= defaultFilterDate %>" class="form-input compact">
+      </label>
+      <label class="mgn-filter-field"><span class="text-[11px] text-slate-500">Pabrik</span>
+        <select id="mgn-factory" class="form-input compact">
+          <option value="">Semua Pabrik</option>
+          <% (factories || []).forEach((factory) => { %>
+            <option value="<%= factory.id %>"><%= factory.name %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label class="mgn-auto-wrap">
+        <input id="mgn-auto" type="checkbox" <%= isEdit ? '' : 'checked' %>>
+        <span class="text-xs text-slate-600">Centang semua hasil filter</span>
+      </label>
+    </div>
+
     <% if (!payments.length) { %><p class="empty">Tidak ada pembayaran yang tersedia.</p><% } %>
-    <div class="mt-4 grid gap-3">
+    <div id="mgn-list" class="mgn-list">
       <% payments.forEach((payment) => { const checked = selectedIds.includes(payment.id); %>
         <% const notaBons = payment.notas?.nota_items?.flatMap((item) => item.bons ? [item.bons] : []) || []; %>
-        <label class="select-row">
-          <input type="checkbox" name="payment_ids" value="<%= payment.id %>" data-total="<%= payment.amount_paid %>" <%= checked ? 'checked' : '' %>>
-          <span>
+        <% const factoryIds = [...new Set(notaBons.map((bon) => bon.factory_id).filter(Boolean))]; %>
+        <% const plates = [...new Set(notaBons.map((bon) => bon.plate_number || '').filter(Boolean))].join('|').toUpperCase(); %>
+        <% const subTotal = notaBons.reduce((s, bon) => s + (bon.sub_notas || []).reduce((x, sub) => x + Number(sub.amount || 0), 0), 0); %>
+        <% const rowTotal = Number(payment.amount_paid || 0) + subTotal; %>
+        <% const notaLines = []; notaBons.forEach((bon) => { const subs = bon.sub_notas || []; notaLines.push(`<span class="mgn-line">${format.date(payment.payment_date)} · ${bon.plate_number || '-'} · ${format.number(bon.netto_2)} kg @ ${format.currency(bon.price)}${bon.factories?.name ? ' · ' + bon.factories.name : ''}</span>`); subs.forEach((sub) => notaLines.push(`<span class="mgn-line mgn-sub">· Sub Nota: ${sub.name} — ${format.currency(sub.amount)}</span>`)); }); %>
+        <label class="select-row" data-plate="<%= plates %>" data-date="<%= payment.payment_date ? format.dateInput(payment.payment_date) : '' %>" data-factories="<%= factoryIds.join(',') %>">
+          <input type="checkbox" name="payment_ids" value="<%= payment.id %>" data-total="<%= rowTotal %>" <%= checked ? 'checked' : '' %>>
+          <span class="mgn-info">
             <strong><%= payment.notas?.invoice_number || '-' %> · <%= payment.notas?.recipient_name || '-' %></strong>
             <small>
-              <%= format.date(payment.payment_date) %>
-              <% notaBons.forEach((bon) => { %>
-                · <%= format.number(bon.netto_2) %> kg @ <%= format.currency(bon.price) %>
-              <% }) %>
+              <%- notaLines.join('') %>
             </small>
           </span>
-          <b><%= format.currency(payment.amount_paid) %></b>
+          <b data-amt><%= format.currency(rowTotal) %></b>
         </label>
       <% }) %>
     </div>
@@ -50,5 +76,56 @@
     <button class="btn-primary"><%= isEdit ? 'Update Margin' : 'Simpan Margin' %></button>
   </section>
 </form>
+<style>
+  .mgn-filter-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+    background: var(--surface-soft); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin: 12px 0;
+  }
+  .mgn-filter-field { display: flex; flex-direction: column; gap: 2px; }
+  .mgn-auto-wrap { display: inline-flex; align-items: center; gap: 6px; padding-bottom: 9px; }
+  .mgn-list { max-height: 52vh; overflow-y: auto; display: grid; gap: 6px; padding-right: 4px; }
+  .mgn-list .select-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .mgn-list .select-row:hover { background: var(--surface-soft); }
+  .mgn-list .select-row.bon-row-hidden { display: none; }
+  .mgn-info strong { display: block; font-size: .9rem; }
+  .mgn-line { display: block; color: #64748b; font-size: .75rem; margin-top: 1px; }
+  .mgn-sub { color: #a855f7; }
+  .mgn-info b { font-size: .9rem; }
+  .select-row > [data-amt] { white-space: nowrap; }
+</style>
 <script src="<%= url('/js/sum-checks.js') %>"></script>
+<script>
+(function () {
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#mgn-list .select-row'));
+  var qInput = document.getElementById('mgn-q');
+  var dateInput = document.getElementById('mgn-date');
+  var factoryInput = document.getElementById('mgn-factory');
+  var autoInput = document.getElementById('mgn-auto');
+
+  function applyFilters() {
+    var q = String(qInput.value || '').replace(/\s+/g, '').toUpperCase();
+    var d = dateInput.value;
+    var f = factoryInput.value;
+    var anyVisible = false;
+    rows.forEach(function (row) {
+      var visible =
+        (!q || String(row.dataset.plate || '').split('|').some(function (p) { return p.indexOf(q) !== -1; })) &&
+        (!d || row.dataset.date === d) &&
+        (!f || String(row.dataset.factories || '').split(',').indexOf(f) !== -1);
+      row.classList.toggle('bon-row-hidden', !visible);
+      if (visible) anyVisible = true;
+      var cb = row.querySelector('input[type="checkbox"]');
+      if (visible && autoInput && autoInput.checked) cb.checked = true;
+    });
+    window.updateCheckedTotal && updateCheckedTotal();
+  }
+
+  [qInput, dateInput, factoryInput].forEach(function (el) {
+    if (el) el.addEventListener('input', applyFilters);
+  });
+  if (autoInput) autoInput.addEventListener('change', applyFilters);
+  applyFilters();
+})();
+</script>
 <%- include('../partials/footer') %>

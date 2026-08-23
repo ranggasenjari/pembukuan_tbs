@@ -12,6 +12,41 @@ extension OcrModeX on OcrMode {
   }
 }
 
+/// Prompt & output schema khusus untuk satu pabrik tertentu pada Internal OCR.
+/// Karena format bon tiap pabrik berbeda, pengaturan ini memungkinkan setiap
+/// pabrik memakai prompt dan schema yang sesuai.
+class OcrFactorySettings {
+  final String factoryId;
+  final String? factoryName;
+  final String? prompt;
+  final String? outputSchema;
+
+  const OcrFactorySettings({
+    required this.factoryId,
+    this.factoryName,
+    this.prompt,
+    this.outputSchema,
+  });
+
+  factory OcrFactorySettings.fromJson(Map<String, dynamic> json) {
+    return OcrFactorySettings(
+      factoryId: json['factory_id']?.toString() ?? '',
+      factoryName: json['factory_name']?.toString(),
+      prompt: json['prompt']?.toString(),
+      outputSchema: json['output_schema']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'factory_id': factoryId,
+      'factory_name': factoryName,
+      'prompt': prompt,
+      'output_schema': outputSchema,
+    };
+  }
+}
+
 class OcrSettingsModel {
   final OcrMode mode;
   final String webhookUrl;
@@ -20,6 +55,9 @@ class OcrSettingsModel {
   final String mistralPrompt;
   final String mistralOutputSchema;
 
+  /// Pengaturan prompt & schema khusus per pabrik, key = factory id.
+  final Map<String, OcrFactorySettings> factorySettings;
+
   const OcrSettingsModel({
     required this.mode,
     required this.webhookUrl,
@@ -27,6 +65,7 @@ class OcrSettingsModel {
     this.mistralApiKey = '',
     required this.mistralPrompt,
     required this.mistralOutputSchema,
+    this.factorySettings = const {},
   });
 
   factory OcrSettingsModel.defaults() {
@@ -64,7 +103,37 @@ class OcrSettingsModel {
           : const JsonEncoder.withIndent(
               '  ',
             ).convert(schema ?? defaultMistralOutputSchema),
+      factorySettings: _parseFactorySettings(json['factory_settings']),
     );
+  }
+
+  static Map<String, OcrFactorySettings> _parseFactorySettings(dynamic value) {
+    final map = <String, OcrFactorySettings>{};
+    if (value is Map) {
+      for (final entry in value.entries) {
+        final raw = entry.value;
+        if (raw is Map) {
+          final item = Map<String, dynamic>.from(raw)
+            ..putIfAbsent('factory_id', () => entry.key.toString());
+          final settings = OcrFactorySettings.fromJson(item);
+          if (settings.factoryId.isNotEmpty) {
+            map[settings.factoryId] = settings;
+          }
+        }
+      }
+    } else if (value is List) {
+      for (final raw in value) {
+        if (raw is Map) {
+          final settings = OcrFactorySettings.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (settings.factoryId.isNotEmpty) {
+            map[settings.factoryId] = settings;
+          }
+        }
+      }
+    }
+    return map;
   }
 
   OcrSettingsModel copyWith({
@@ -74,6 +143,7 @@ class OcrSettingsModel {
     String? mistralApiKey,
     String? mistralPrompt,
     String? mistralOutputSchema,
+    Map<String, OcrFactorySettings>? factorySettings,
   }) {
     return OcrSettingsModel(
       mode: mode ?? this.mode,
@@ -82,6 +152,7 @@ class OcrSettingsModel {
       mistralApiKey: mistralApiKey ?? this.mistralApiKey,
       mistralPrompt: mistralPrompt ?? this.mistralPrompt,
       mistralOutputSchema: mistralOutputSchema ?? this.mistralOutputSchema,
+      factorySettings: factorySettings ?? this.factorySettings,
     );
   }
 
@@ -93,6 +164,9 @@ class OcrSettingsModel {
       'mistral_api_key': mistralApiKey,
       'mistral_prompt': mistralPrompt,
       'mistral_output_schema': mistralOutputSchema,
+      'factory_settings': {
+        for (final entry in factorySettings.entries) entry.key: entry.value.toJson(),
+      },
     };
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../providers/providers.dart';
 import '../home/home_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -24,6 +25,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
 
       if (response.session != null) {
+        await _activateOffline(response);
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -47,6 +49,83 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Mengaktifkan sesi offline setelah login online berhasil.
+  /// PIN diatur sekali (opsional) supaya data lokal bisa dibuka saat offline.
+  Future<void> _activateOffline(AuthResponse response) async {
+    final user = response.user;
+    if (user == null) return;
+    final coordinator = ref.read(coordinatorProvider);
+    try {
+      final existing = await coordinator.loadSession();
+      if (existing != null && existing.userId == user.id) {
+        await coordinator.attach(existing);
+      } else {
+        final pin = await _promptSetupPin();
+        if (pin != null && pin.isNotEmpty) {
+          if (!RegExp(r'^\d{6}$').hasMatch(pin)) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('PIN harus 6 digit, aktivasi offline dilewati.'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+            return;
+          }
+          await coordinator.activate(
+            userId: user.id,
+            email: user.email ?? _emailController.text.trim(),
+            pin: pin,
+          );
+        }
+      }
+    } catch (_) {
+      // Mode offline tetap berfungsi menunggu aktivasi berikutnya.
+    }
+  }
+
+  Future<String?> _promptSetupPin() {
+    final pinController = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Aktifkan Mode Offline'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Atur PIN 6 digit untuk membuka data lokal saat tidak ada '
+              'koneksi internet. Anda bisa melewati langkah ini.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'PIN offline 6 digit',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, null),
+            child: const Text('Lewati'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, pinController.text),
+            child: const Text('Aktifkan'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

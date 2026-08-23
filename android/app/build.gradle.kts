@@ -37,15 +37,6 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["appName"] = "PEMBUKUAN TBS"
     }
-    flavorDimensions += "edition"
-    productFlavors {
-        create("offline") {
-            dimension = "edition"
-            applicationIdSuffix = ".offline"
-            versionNameSuffix = "-offline"
-            manifestPlaceholders["appName"] = "PEMBUKUAN TBS OFFLINE"
-        }
-    }
     signingConfigs {
         create("release") {
             keyAlias = keystoreProperties["RELEASE_KEY_ALIAS"] as String

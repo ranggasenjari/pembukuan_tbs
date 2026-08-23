@@ -24,8 +24,35 @@ function serializePaymentRelation(body) {
     contact: cleanRaw(body.contact) || null,
     address: cleanText(body.address) || null,
     notes: cleanRaw(body.notes) || null,
+    fee: body.fee === '' || body.fee === undefined || body.fee === null ? null : Number(body.fee),
+    potongan_bp: body.potongan_bp === '' || body.potongan_bp === undefined || body.potongan_bp === null ? null : Number(body.potongan_bp),
+    harga: body.harga === '' || body.harga === undefined || body.harga === null ? null : Number(body.harga),
+    uang_minum: body.uang_minum === '' || body.uang_minum === undefined || body.uang_minum === null ? null : Number(body.uang_minum),
     updated_at: new Date().toISOString()
   };
+}
+
+function serializeDatedRows(body, field, paymentRelationId) {
+  const dates = arrayField(body[`${field}_tanggal`]);
+  const amounts = arrayField(body[`${field}_amount`]);
+  const notes = arrayField(body[`${field}_notes`]);
+  return dates
+    .map((tanggal, index) => ({
+      payment_relation_id: paymentRelationId,
+      tanggal: cleanRaw(tanggal) || null,
+      amount: Number(amounts[index] ?? 0) || 0,
+      notes: cleanRaw(notes[index]) || null
+    }))
+    .filter((row) => row.tanggal || row.amount);
+}
+
+function serializeGiringan(body, paymentRelationId) {
+  return arrayField(body.giringan_name)
+    .map((name) => ({
+      payment_relation_id: paymentRelationId,
+      name: cleanText(name)
+    }))
+    .filter((row) => row.name);
 }
 
 function serializeAccounts(body, paymentRelationId) {
@@ -62,27 +89,52 @@ async function findByPlate(supabase, plate) {
   return getPaymentRelation(supabase, data.payment_relation_id);
 }
 
+const BASE_SELECT = '*, payment_relation_accounts(*), payment_relation_vehicles(*, vehicles(*))';
+const EXTRA_SELECT = ', payment_relation_hutang(*), payment_relation_rolling(*), payment_relation_giringan(*)';
+
+async function safe(promise) {
+  try { return await promise; } catch { return null; }
+}
+
 async function listPaymentRelations(supabase, filters = {}) {
-  let query = db(supabase)
-    .from('payment_relations')
-    .select('*, payment_relation_accounts(*), payment_relation_vehicles(*, vehicles(*))');
+  const applyFilters = (query) => {
+    if (filters.q) {
+      const q = String(filters.q).trim();
+      query = query.or(`name.ilike.%${q}%,address.ilike.%${q}%,contact.ilike.%${q}%`);
+    }
+    return query;
+  };
 
-  if (filters.q) {
-    const q = String(filters.q).trim();
-    query = query.or(`name.ilike.%${q}%,address.ilike.%${q}%,contact.ilike.%${q}%`);
+  try {
+    return assertNoError(await applyFilters(
+      db(supabase).from('payment_relations').select(BASE_SELECT + EXTRA_SELECT)
+    ).order('name', { ascending: true }));
+  } catch (error) {
+    // Fallback bila tabel tambahan (hutang/rolling/giringan) belum dimigrasi.
+    return assertNoError(await applyFilters(
+      db(supabase).from('payment_relations').select(BASE_SELECT)
+    ).order('name', { ascending: true }));
   }
-
-  return assertNoError(await query.order('name', { ascending: true }));
 }
 
 async function getPaymentRelation(supabase, id) {
-  return assertNoError(
-    await db(supabase)
-      .from('payment_relations')
-      .select('*, payment_relation_accounts(*), payment_relation_vehicles(*, vehicles(*))')
-      .eq('id', id)
-      .single()
-  );
+  try {
+    return assertNoError(
+      await db(supabase)
+        .from('payment_relations')
+        .select(BASE_SELECT + EXTRA_SELECT)
+        .eq('id', id)
+        .single()
+    );
+  } catch (error) {
+    return assertNoError(
+      await db(supabase)
+        .from('payment_relations')
+        .select(BASE_SELECT)
+        .eq('id', id)
+        .single()
+    );
+  }
 }
 
 async function createPaymentRelation(supabase, body) {
@@ -125,6 +177,9 @@ async function replaceChildren(supabase, paymentRelationId, body) {
   assertNoError(
     await db(supabase).from('payment_relation_vehicles').delete().eq('payment_relation_id', paymentRelationId)
   );
+  await safe(db(supabase).from('payment_relation_hutang').delete().eq('payment_relation_id', paymentRelationId));
+  await safe(db(supabase).from('payment_relation_rolling').delete().eq('payment_relation_id', paymentRelationId));
+  await safe(db(supabase).from('payment_relation_giringan').delete().eq('payment_relation_id', paymentRelationId));
 
   const accounts = serializeAccounts(body, paymentRelationId);
   if (accounts.length) {
@@ -138,11 +193,29 @@ async function replaceChildren(supabase, paymentRelationId, body) {
   if (vehicleRows.length) {
     assertNoError(await db(supabase).from('payment_relation_vehicles').insert(vehicleRows));
   }
+
+  const hutang = serializeDatedRows(body, 'hutang', paymentRelationId);
+  if (hutang.length) {
+    await safe(db(supabase).from('payment_relation_hutang').insert(hutang));
+  }
+
+  const rolling = serializeDatedRows(body, 'rolling', paymentRelationId);
+  if (rolling.length) {
+    await safe(db(supabase).from('payment_relation_rolling').insert(rolling));
+  }
+
+  const giringan = serializeGiringan(body, paymentRelationId);
+  if (giringan.length) {
+    await safe(db(supabase).from('payment_relation_giringan').insert(giringan));
+  }
 }
 
 async function deletePaymentRelation(supabase, id) {
   assertNoError(await db(supabase).from('payment_relation_accounts').delete().eq('payment_relation_id', id));
   assertNoError(await db(supabase).from('payment_relation_vehicles').delete().eq('payment_relation_id', id));
+  await safe(db(supabase).from('payment_relation_hutang').delete().eq('payment_relation_id', id));
+  await safe(db(supabase).from('payment_relation_rolling').delete().eq('payment_relation_id', id));
+  await safe(db(supabase).from('payment_relation_giringan').delete().eq('payment_relation_id', id));
   assertNoError(await db(supabase).from('payment_relations').delete().eq('id', id));
 }
 

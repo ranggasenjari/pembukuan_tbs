@@ -6,74 +6,265 @@
   </div>
   <a href="<%= url('/vehicles/new') %>" class="btn-primary">Tambah Kendaraan</a>
 </div>
-<div class="table-card">
-  <table>
-    <thead>
-      <tr>
-        <th>Plat Nomor</th>
-        <th>Driver</th>
-        <th>Relasi</th>
-        <th>Pabrik</th>
-        <th>Pot. BP</th>
-        <th>Harga</th>
-        <th>Super</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      <% if (!vehicles.length) { %>
-        <tr><td colspan="6" class="empty">Belum ada data kendaraan.</td></tr>
+
+<form method="get" action="<%= url('/vehicles') %>" class="filter-bar">
+  <input name="q" value="<%= q || '' %>" class="form-input compact" placeholder="Cari plat nomor / driver...">
+  <button class="btn-primary">Cari</button>
+  <% if (q) { %><a href="<%= url('/vehicles') %>" class="btn-secondary">Reset</a><% } %>
+</form>
+
+<% if (!vehicles.length) { %>
+  <section class="form-card"><p class="empty">Belum ada data kendaraan.</p></section>
+<% } %>
+
+<div class="vehicle-list">
+  <% vehicles.forEach((v) => { %>
+    <% const bpVal = v.potongan_bp ?? 100000; %>
+    <article class="vehicle-card" data-plate="<%= v.plate_number %>">
+      <div class="vc-head">
+        <div class="vc-title">
+          <strong class="vc-plate"><%= v.plate_number %></strong>
+          <span class="ticket-tag">Kendaraan</span>
+        </div>
+        <div class="vc-actions">
+          <a href="<%= url(`/vehicles/${v.id}/edit`) %>" class="btn-secondary small">Edit</a>
+          <form method="post" action="<%= url(`/vehicles/${v.id}?_method=DELETE`) %>" class="inline" onsubmit="return confirm('Hapus kendaraan <%= v.plate_number %>?')">
+            <button class="btn-secondary small danger">Hapus</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="vc-info">
+        <div class="vc-field">
+          <span>Driver</span>
+          <% if (v.driver_list.length) { %>
+            <div class="mini-list"><% v.driver_list.forEach((d) => { %><div><%= d %></div><% }) %></div>
+          <% } else { %>
+            <strong><%= v.driver_name || '-' %></strong>
+          <% } %>
+        </div>
+        <div class="vc-field">
+          <span>Pot. Bp</span>
+          <strong><%= format.currency(v.potongan_bp) %></strong>
+        </div>
+        <div class="vc-field">
+          <span>Harga / Kg</span>
+          <% if (v.harga > 100 || v.harga < -100) { %>
+            <strong><%= format.currency(v.harga) %></strong>
+          <% } else if (v.harga >= -100 && v.harga <= 100 && v.harga !== 0 && v.harga !== null) { %>
+            <strong class="text-orange-600"><%= v.harga >= 0 ? '+' : '' %><%= v.harga %> (offset)</strong>
+          <% } else { %>
+            <strong>-</strong>
+          <% } %>
+        </div>
+        <div class="vc-field">
+          <span>Relasi Bayar</span>
+          <strong><%= v.payment_relation_name || '-' %></strong>
+        </div>
+      </div>
+
+      <% if (v.history && v.history.length) { %>
+        <div class="vc-history">
+          <span class="vc-history-label">Riwayat Netto &amp; BP</span>
+          <div class="vc-history-list">
+            <% v.history.forEach((h) => { %>
+              <div class="vc-history-item">
+                <span class="vc-history-date"><%= format.date(h.date) %></span>
+                <span class="vc-history-netto"><%= format.number(h.netto2) %> kg</span>
+                <span class="vc-history-bp">BP <%= format.currency(h.bp) %></span>
+                <% if (h.factory) { %><span class="vc-history-factory"><%= h.factory %></span><% } %>
+                <% if (h.imageUrl) { %><img class="bon-photo-clickable vc-history-photo" src="<%= h.imageUrl %>" alt="Foto bon" title="Lihat foto bon"><% } %>
+              </div>
+            <% }) %>
+          </div>
+        </div>
       <% } %>
-      <% vehicles.forEach((v) => { %>
-        <tr>
-          <td class="font-bold"><%= v.plate_number %></td>
-          <td>
-            <% if (v.driver_list.length) { %>
-              <ul class="list-disc list-inside text-sm">
-                <% v.driver_list.forEach((d) => { %><li><%= d %></li><% }) %>
-              </ul>
-            <% } else { %>
-              <span class="text-slate-400"><%= v.driver_name || '-' %></span>
-            <% } %>
-          </td>
-          <td>
-            <% if (v.relation_list.length) { %>
-              <ul class="list-disc list-inside text-sm">
-                <% v.relation_list.forEach((r) => { %><li><%= r %></li><% }) %>
-              </ul>
-            <% } else { %>
-              <span class="text-slate-400">-</span>
-            <% } %>
-          </td>
-          <td>
-            <% if (v.factory_list.length) { %>
-              <ul class="list-disc list-inside text-sm">
-                <% v.factory_list.forEach((f) => { %><li><%= f %></li><% }) %>
-              </ul>
-            <% } else { %>
-              <span class="text-slate-400">-</span>
-            <% } %>
-          </td>
-          <td><%= format.currency(v.potongan_bp) %></td>
-          <td>
-            <% if (v.harga > 100 || v.harga < -100) { %>
-              <%= format.currency(v.harga) %>
-            <% } else if (v.harga >= -100 && v.harga <= 100 && v.harga !== 0) { %>
-              <span class="text-orange-600"><%= v.harga >= 0 ? '+' : '' %><%= v.harga %> (offset)</span>
-            <% } else { %>
-              -
-            <% } %>
-          </td>
-          <td><%= v.is_super ? '✓' : '-' %></td>
-          <td class="text-right">
-            <a href="<%= url(`/vehicles/${v.id}/edit`) %>" class="link">Edit</a>
-            <form method="post" action="<%= url(`/vehicles/${v.id}?_method=DELETE`) %>" class="inline" onsubmit="return confirm('Hapus kendaraan <%= v.plate_number %>?')">
-              <button class="link-rose">Hapus</button>
-            </form>
-          </td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+
+      <div class="vc-inline">
+        <form method="post" action="<%= url(`/vehicles/${v.id}/inline`) %>" class="inline-vehicle-form">
+          <div class="inline-vehicle-field">
+            <span class="form-label">Potongan BP (ribu)</span>
+            <div class="bp-pills">
+              <label class="bp-pill <%= bpVal == 0 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="0" <%= bpVal == 0 ? 'checked' : '' %>>0</label>
+              <label class="bp-pill <%= bpVal == 50000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="50000" <%= bpVal == 50000 ? 'checked' : '' %>>50</label>
+              <label class="bp-pill <%= bpVal == 70000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="70000" <%= bpVal == 70000 ? 'checked' : '' %>>70</label>
+              <label class="bp-pill <%= bpVal == 100000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="100000" <%= bpVal == 100000 ? 'checked' : '' %>>100</label>
+              <label class="bp-pill <%= bpVal == 150000 ? 'active' : '' %>"><input type="radio" name="potongan_bp" value="150000" <%= bpVal == 150000 ? 'checked' : '' %>>150</label>
+            </div>
+          </div>
+          <div class="inline-vehicle-field">
+            <span class="form-label">Harga / Kg (Rp)</span>
+            <div class="harga-wrap">
+              <input name="harga" value="<%= v.harga ?? '' %>" type="number" class="form-input compact">
+              <span class="harga-note">di luar -100..100 = tetap</span>
+              <span class="harga-note">dalam = offset (±)</span>
+            </div>
+          </div>
+          <div class="inline-vehicle-field">
+            <span class="form-label">Relasi Bayar</span>
+            <div class="rel-select-wrap">
+              <select name="payment_relation_id" class="form-input compact">
+                <option value="">(Tidak ada)</option>
+                <% paymentRelations.forEach((rel) => { %>
+                  <option value="<%= rel.id %>" <%= v.payment_relation_id === rel.id ? 'selected' : '' %>><%= rel.name %></option>
+                <% }) %>
+              </select>
+              <button type="button" class="vc-add-rel" data-vehicle-id="<%= v.id %>" title="Tambah Relasi Bayar">+</button>
+            </div>
+          </div>
+          <button class="btn-primary small">Simpan</button>
+        </form>
+      </div>
+    </article>
+  <% }) %>
 </div>
+
+<dialog id="rel-bayar-dialog" class="rounded-xl shadow-xl p-6 max-w-lg">
+  <h3 class="text-lg font-bold mb-1">Tambah Relasi Bayar</h3>
+  <p class="text-sm text-slate-500 mb-4">Relasi baru akan langsung dihubungkan ke kendaraan ini.</p>
+  <form id="rel-bayar-form" class="space-y-3">
+    <label class="block"><span class="form-label">Nama Relasi Bayar</span><input required name="name" class="form-input uppercase" placeholder="Contoh: CV MITRA JAYA"></label>
+    <div class="grid gap-3 md:grid-cols-2">
+      <label class="block"><span class="form-label">Kontak</span><input name="contact" class="form-input" placeholder="No. HP / WA"></label>
+      <label class="block"><span class="form-label">Alamat / Asal</span><input name="address" class="form-input uppercase" placeholder="Alamat"></label>
+    </div>
+    <label class="block"><span class="form-label">Catatan</span><textarea name="notes" rows="2" class="form-input" placeholder="Catatan (opsional)"></textarea></label>
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="form-label mb-0">Rekening</span>
+        <button type="button" id="add-payment-relation-account" class="btn-secondary small">+ Tambah Rekening</button>
+      </div>
+      <div id="payment-relation-accounts" class="space-y-3">
+        <div class="payment-relation-account-row grid gap-3 md:grid-cols-[1fr_1fr_1fr_48px]">
+          <input name="bank_name" class="form-input uppercase" placeholder="Nama Bank">
+          <input name="account_number" class="form-input" placeholder="No Rekening">
+          <input name="account_name" class="form-input uppercase" placeholder="Nama Rekening">
+          <button type="button" class="remove-payment-relation-account rounded-lg bg-rose-50 text-rose-700">x</button>
+        </div>
+      </div>
+    </div>
+  </form>
+  <div class="flex gap-2 mt-5 justify-end">
+    <button type="button" id="cancel-rel-bayar" class="btn-secondary">Batal</button>
+    <button type="button" id="confirm-rel-bayar" class="btn-primary">Simpan & Hubungkan</button>
+  </div>
+</dialog>
+
+<style>
+  .vehicle-list { display:grid; gap:16px; }
+  .vehicle-card { background:var(--surface); border:1px solid #d8dce3; border-radius:14px; box-shadow:0 6px 18px rgb(16 24 40 / .08), 0 1px 3px rgb(16 24 40 / .06); overflow:hidden; position:relative; }
+  .vehicle-card::before { background:linear-gradient(90deg, var(--primary), #14b8a6); content:''; height:4px; left:0; position:absolute; right:0; top:0; }
+  .vehicle-card:hover { box-shadow:0 10px 26px rgb(16 24 40 / .12), 0 2px 6px rgb(16 24 40 / .08); }
+  .vc-head { align-items:center; display:flex; gap:12px; justify-content:space-between; padding:12px 14px 8px; }
+  .vc-title { align-items:center; display:flex; gap:8px; min-width:0; }
+  .vc-plate { font-size:1.05rem; font-weight:950; letter-spacing:.02em; }
+  .ticket-tag { background:var(--surface-soft); border:1px solid var(--line); border-radius:4px; color:var(--text); font-size:.68rem; font-weight:800; padding:1px 6px; }
+  .vc-actions { align-items:center; display:flex; gap:6px; }
+  .vc-actions form.inline { margin:0; }
+  .vc-info { border-top:1px solid var(--line); display:grid; gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); padding:10px 14px 12px; }
+  @media (max-width:680px) { .vc-info { grid-template-columns:1fr 1fr; } }
+  .vc-field { display:grid; gap:2px; min-width:0; }
+  .vc-field > span { color:var(--muted); font-size:.6rem; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
+  .vc-field strong { font-size:.84rem; }
+  .vc-field .mini-list { display:grid; gap:3px; }
+  .vc-field .mini-list div { background:var(--surface-soft); border:1px solid var(--line); border-radius:5px; font-size:.72rem; padding:3px 6px; }
+  .vc-history { border-top:1px solid var(--line); padding:10px 14px 12px; }
+  .vc-history-label { color:var(--muted); display:block; font-size:.6rem; font-weight:900; letter-spacing:.05em; margin-bottom:6px; text-transform:uppercase; }
+  .vc-history-list { display:flex; flex-wrap:wrap; gap:6px; }
+  .vc-history-item { align-items:center; background:var(--surface-soft); border:1px solid var(--line); border-radius:6px; display:flex; gap:8px; font-size:.7rem; padding:3px 8px; }
+  .vc-history-date { color:var(--muted); font-weight:700; }
+  .vc-history-netto { color:var(--text); font-weight:800; }
+  .vc-history-bp { background:#eef2ff; border-radius:4px; color:#4318FF; font-weight:700; padding:1px 5px; }
+  .vc-history-factory { background:#ecfdf5; border-radius:4px; color:#047857; font-weight:700; padding:1px 5px; }
+  .vc-history-photo { border:1px solid var(--line); border-radius:4px; cursor:zoom-in; height:22px; object-fit:cover; width:22px; }
+  .vc-history-photo:hover { border-color:var(--primary); }
+  #bon-photo-lightbox {
+    position: fixed; inset: 0; z-index: 10050; display: flex; align-items: center; justify-content: center;
+    background: rgba(2, 6, 23, 0.92); touch-action: none; user-select: none;
+  }
+  #bon-photo-lightbox.hidden { display: none; }
+  #bon-photo-lightbox img {
+    max-width: 92vw; max-height: 86vh; transform-origin: center; will-change: transform;
+    box-shadow: 0 20px 60px rgb(0 0 0 / 0.5); border-radius: 4px;
+  }
+  .pb-toolbar {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px; background: rgb(15 23 42 / 0.9);
+    border: 1px solid rgb(51 65 85 / 0.8); border-radius: 999px; padding: 6px 12px; z-index: 10060;
+  }
+  .pb-tool-btn {
+    width: 34px; height: 34px; border-radius: 999px; border: 1px solid #334155; background: #1e293b;
+    color: #e2e8f0; font-size: 1rem; line-height: 1; cursor: pointer;
+  }
+  .pb-tool-btn:hover { background: #334155; }
+  .pb-tool-btn.pb-close { background: #7f1d1d; border-color: #991b1b; }
+  .pb-zoom-label { color: #cbd5e1; font-size: .72rem; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+  .vc-inline { background:#f8fafc; border-top:1px solid var(--line); padding:8px 12px 10px; }
+  .inline-vehicle-form { align-items:flex-end; display:flex; flex-wrap:wrap; gap:10px; }
+  .inline-vehicle-field { display:flex; flex-direction:column; gap:2px; }
+  .inline-vehicle-field .form-input.compact { margin-top:0; }
+  .inline-vehicle-field .form-label { font-size:.62rem; }
+  .harga-wrap { align-items:center; display:flex; gap:6px; }
+  .harga-note { color:var(--muted); font-size:.68rem; line-height:1.2; }
+  .bp-pills { display:flex; gap:3px; }
+  .bp-pill { align-items:center; background:#fff; border:1px solid #d1d5db; border-radius:6px; color:#475569; cursor:pointer; display:flex; font-size:11px; gap:2px; padding:3px 10px; }
+  .bp-pill.active { background:#eef2ff; border-color:#4318FF; color:#4318FF; font-weight:600; }
+  .bp-pill input { display:none; }
+  .rel-select-wrap { align-items:center; display:flex; gap:4px; }
+  .rel-select-wrap select { flex:1; }
+  .rel-select-wrap .form-input.compact { margin-top:0; }
+  .vc-add-rel { background:var(--primary-soft); border:1px solid var(--primary); border-radius:6px; color:var(--primary-strong); cursor:pointer; font-size:1rem; font-weight:900; height:24px; line-height:1; min-width:24px; padding:0; }
+  .vc-add-rel:hover { background:var(--primary); color:#fff; }
+  .btn-primary.small, .btn-secondary.small { font-size:.7rem; min-height:24px; padding:.15rem .5rem; width:auto; }
+  .btn-secondary.danger { background:#fff1f2; border-color:#fecdd3; color:var(--danger, #e11d48); }
+</style>
+
+<script>
+  document.querySelectorAll('.bp-pill').forEach(p => p.addEventListener('click', function() {
+    this.closest('.bp-pills').querySelectorAll('.bp-pill').forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+    this.querySelector('input').checked = true;
+  }));
+
+  let relBayarTargetId = null;
+  const dialog = document.getElementById('rel-bayar-dialog');
+  const relForm = document.getElementById('rel-bayar-form');
+
+  document.querySelectorAll('.vc-add-rel').forEach(btn => {
+    btn.addEventListener('click', () => {
+      relBayarTargetId = btn.dataset.vehicleId;
+      relForm.reset();
+      const rows = relForm.querySelectorAll('.payment-relation-account-row');
+      rows.forEach((row, i) => { if (i > 0) row.remove(); });
+      dialog.showModal();
+    });
+  });
+  document.getElementById('cancel-rel-bayar')?.addEventListener('click', () => dialog.close());
+  document.getElementById('confirm-rel-bayar')?.addEventListener('click', async () => {
+    const name = String(relForm.querySelector('[name="name"]')?.value || '').trim();
+    if (!name) { alert('Nama relasi bayar wajib diisi.'); return; }
+    const confirmBtn = document.getElementById('confirm-rel-bayar');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Menyimpan...';
+    try {
+      const payload = new URLSearchParams(new FormData(relForm));
+      const res = await fetch(appUrl(`/vehicles/${relBayarTargetId}/payment-relation/new`), {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        body: payload
+      });
+      const result = await res.json();
+      if (!res.ok || !result.ok) throw new Error(result.error || 'Gagal menyimpan relasi bayar.');
+      dialog.close();
+      window.location.href = appUrl('/vehicles');
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Simpan & Hubungkan';
+    }
+  });
+</script>
+<script src="<%= url('/js/payment-relation-form.js') %>"></script>
+<script src="<%= url('/js/photo-viewer.js') %>"></script>
 <%- include('../partials/footer') %>

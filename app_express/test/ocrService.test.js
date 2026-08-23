@@ -1,5 +1,6 @@
 const {
   MISTRAL_OCR_URL,
+  normalizeAnnotationFormat,
   normalizeOcrData,
   processInternalOcr,
   processWebhookOcr
@@ -101,5 +102,119 @@ describe('ocrService', () => {
       netto_1: 2000,
       netto_2: 1900
     }));
+  });
+
+  it('uses per-factory prompt & schema for internal OCR and overrides factory_name', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        document_annotation: JSON.stringify({
+          ticket_number: 'TBS-F-1',
+          bon_date: '2026-08-04',
+          plate_number: 'BK 90 CD',
+          netto_1: '500',
+          netto_2: '480'
+        })
+      })
+    }));
+    const storage = makeStorageClient();
+
+    const result = await processInternalOcr(
+      makeFile(),
+      {
+        mistral_api_key: 'mistral-key',
+        mistral_prompt: 'Default prompt',
+        mistral_output_schema: JSON.stringify({ type: 'json_schema', json_schema: { name: 'x', schema: {} } })
+      },
+      { fetch: fetchMock, storageClient: storage.client },
+      {
+        factory_id: 'factory-1',
+        factory_name: 'PT PABRIK A',
+        prompt: 'Factory custom prompt',
+        output_schema: JSON.stringify({ type: 'json_schema', json_schema: { name: 'f', schema: {} } })
+      },
+      'PT PABRIK A'
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.document_annotation_prompt).toBe('Factory custom prompt');
+    expect(body.document_annotation_format.json_schema.name).toBe('f');
+    expect(result.data.factory_name).toBe('PT PABRIK A');
+  });
+
+  it('falls back to default prompt/schema when factory setting is empty', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ document_annotation: '{}' })
+    }));
+    const storage = makeStorageClient();
+
+    await processInternalOcr(
+      makeFile(),
+      {
+        mistral_api_key: 'mistral-key',
+        mistral_prompt: 'Default prompt',
+        mistral_output_schema: JSON.stringify({ type: 'json_schema', json_schema: { name: 'x', schema: {} } })
+      },
+      { fetch: fetchMock, storageClient: storage.client },
+      { factory_id: 'factory-1', prompt: '', output_schema: '' },
+      'PABRIK B'
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.document_annotation_prompt).toBe('Default prompt');
+    expect(body.document_annotation_format.json_schema.name).toBe('x');
+  });
+
+  it('resolves factory settings by factory_id from options', async () => {
+    const { resolveFactoryOcrSettings, resolveFactoryName } = require('../src/services/ocrService');
+    const settings = {
+      factory_settings: {
+        'factory-1': { factory_id: 'factory-1', factory_name: 'PT A', prompt: 'p', output_schema: 's' }
+      }
+    };
+    expect(resolveFactoryOcrSettings(settings, 'factory-1').prompt).toBe('p');
+    expect(resolveFactoryOcrSettings(settings, 'factory-9x')).toBeNull();
+    expect(resolveFactoryName([{ id: 'factory-1', name: 'PT A' }], 'factory-1', '')).toBe('PT A');
+    expect(resolveFactoryName([], 'factory-1', 'Nama Fallback')).toBe('Nama Fallback');
+  });
+
+  it('wraps a bare JSON schema into the json_schema envelope required by Mistral', () => {
+    const bare = { type: 'object', additionalProperties: false, properties: { plate_number: { type: ['string', 'null'] } }, required: ['plate_number'] };
+    const wrapped = normalizeAnnotationFormat(JSON.stringify(bare));
+    expect(wrapped.type).toBe('json_schema');
+    expect(wrapped.json_schema.schema).toEqual(bare);
+    expect(wrapped.json_schema.name).toBe('slip_timbangan');
+    expect(wrapped.json_schema.strict).toBe(true);
+  });
+
+  it('keeps an already-wrapped json_schema as-is', () => {
+    const full = { type: 'json_schema', json_schema: { name: 'my_slip', strict: false, schema: { type: 'object', properties: {} } } };
+    expect(normalizeAnnotationFormat(JSON.stringify(full))).toEqual(full);
+  });
+
+  it('fixes the internal OCR request using a bare factory schema', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ document_annotation: '{}' })
+    }));
+    const storage = makeStorageClient();
+    const bare = { type: 'object', additionalProperties: false, properties: { plate_number: { type: ['string', 'null'] } }, required: ['plate_number'] };
+
+    await processInternalOcr(
+      makeFile(),
+      {
+        mistral_api_key: 'mistral-key',
+        mistral_prompt: 'Default prompt',
+        mistral_output_schema: JSON.stringify({ type: 'json_schema', json_schema: { name: 'x', schema: {} } })
+      },
+      { fetch: fetchMock, storageClient: storage.client },
+      { factory_id: 'factory-1', prompt: 'Factory prompt', output_schema: JSON.stringify(bare) },
+      'PABRIK TEST'
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.document_annotation_format.type).toBe('json_schema');
+    expect(body.document_annotation_format.json_schema.schema).toEqual(bare);
   });
 });

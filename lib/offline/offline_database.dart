@@ -60,6 +60,17 @@ class OfflineDatabase {
           )
         ''');
         await database.execute('''
+          CREATE TABLE sub_notas (
+            id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            sync_state TEXT NOT NULL,
+            remote_version INTEGER,
+            bon_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        ''');
+        await database.execute('''
           CREATE TABLE outbox (
             operation_id TEXT PRIMARY KEY,
             entity_type TEXT NOT NULL,
@@ -211,6 +222,64 @@ class OfflineDatabase {
   Future<void> deleteNota(String id) =>
       _database.delete('notas', where: 'id = ?', whereArgs: [id]);
 
+  Future<void> saveSubNota({
+    required Map<String, dynamic> payload,
+    required String syncState,
+    int? remoteVersion,
+  }) async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    await _database.insert(
+      'sub_notas',
+      {
+        'id': payload['id'],
+        'payload': jsonEncode(payload),
+        'sync_state': syncState,
+        'remote_version': remoteVersion,
+        'bon_id': payload['bon_id'],
+        'created_at': payload['created_at'] ?? now,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<OfflineSubNotaRow>> subNotas(String bonId) async {
+    final rows = await _database.query(
+      'sub_notas',
+      where: 'bon_id = ?',
+      whereArgs: [bonId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(OfflineSubNotaRow.fromRow).toList();
+  }
+
+  Future<OfflineSubNotaRow?> subNota(String id) async {
+    final rows = await _database.query('sub_notas', where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : OfflineSubNotaRow.fromRow(rows.first);
+  }
+
+  Future<void> deleteSubNota(String id) =>
+      _database.delete('sub_notas', where: 'id = ?', whereArgs: [id]);
+
+  Future<void> purgeSubNotasForBon(String bonId) async {
+    final rows = await _database.query(
+      'sub_notas',
+      where: 'bon_id = ?',
+      whereArgs: [bonId],
+    );
+    await _database.transaction((transaction) async {
+      for (final row in rows) {
+        final id = row['id']! as String;
+        await transaction.delete(
+          'outbox',
+          where: 'entity_type IN (?, ?) AND entity_id = ?',
+          whereArgs: ['sub_nota', 'sub_nota_delete', id],
+        );
+        await transaction.delete('sub_notas', where: 'id = ?', whereArgs: [id]);
+      }
+    });
+  }
+
   Future<void> enqueue(OfflineOperation operation) => _database.insert(
         'outbox',
         operation.toRow(),
@@ -304,6 +373,18 @@ class OfflineNotaRow {
   final String syncState;
   final int? remoteVersion;
   factory OfflineNotaRow.fromRow(Map<String, Object?> row) => OfflineNotaRow(
+        payload: Map<String, dynamic>.from(jsonDecode(row['payload']! as String)),
+        syncState: row['sync_state']! as String,
+        remoteVersion: (row['remote_version'] as num?)?.toInt(),
+      );
+}
+
+class OfflineSubNotaRow {
+  OfflineSubNotaRow({required this.payload, required this.syncState, this.remoteVersion});
+  final Map<String, dynamic> payload;
+  final String syncState;
+  final int? remoteVersion;
+  factory OfflineSubNotaRow.fromRow(Map<String, Object?> row) => OfflineSubNotaRow(
         payload: Map<String, dynamic>.from(jsonDecode(row['payload']! as String)),
         syncState: row['sync_state']! as String,
         remoteVersion: (row['remote_version'] as num?)?.toInt(),

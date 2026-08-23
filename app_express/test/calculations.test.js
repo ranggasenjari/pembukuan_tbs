@@ -1,4 +1,6 @@
-const { calculateBon, parseDeductions } = require('../src/services/calculations');
+const { calculateBon, parseDeductions, applyFactoryDeductionPresets } = require('../src/services/calculations');
+
+const PENGURUS_FACTORY = '376b98eb-0eb4-4a4e-84aa-902429f85669';
 
 describe('bon calculations', () => {
   it('matches Flutter bon total formula', () => {
@@ -84,6 +86,48 @@ describe('bon calculations', () => {
     expect(deductions).toEqual([
       { label: 'BONGKAR EXTRA', amount: 10000 },
       { label: 'LAIN', amount: 25000 }
+    ]);
+  });
+
+  it('forces uang minum 0 and PPh 0 for the designated factory', () => {
+    const result = calculateBon({
+      factory_id: PENGURUS_FACTORY,
+      netto_1: 9000,
+      netto_2: 8500,
+      price: 2500,
+      dp: 100000,
+      biaya_bongkar: 12,
+      bp_colt: 100000,
+      pph: 1250,
+      uang_minum: 20000,
+      deductions: []
+    });
+
+    expect(result.uang_minum).toBe(0);
+    expect(result.pph).toBe(0);
+    // Pengurus hanya default saat pembuatan; kalkulasi tidak memaksakan potongan
+    expect(result.total).toBe(20_942_000);
+  });
+
+  it('adds the default Pengurus deduction when the factory preset is applied', () => {
+    const result = applyFactoryDeductionPresets(PENGURUS_FACTORY, []);
+    expect(result).toEqual([{ label: 'Pengurus', amount: 50000 }]);
+  });
+
+  it('does not duplicate the Pengurus deduction when it already exists', () => {
+    const deductions = [{ label: 'Pengurus', amount: 50000 }, { label: 'Lain', amount: 10000 }];
+    const result = applyFactoryDeductionPresets(PENGURUS_FACTORY, deductions);
+
+    expect(result).toEqual([
+      { label: 'Pengurus', amount: 50000 },
+      { label: 'Lain', amount: 10000 }
+    ]);
+  });
+
+  it('leaves other factories unchanged', () => {
+    const deductions = [{ label: 'Lain', amount: 10000 }];
+    expect(applyFactoryDeductionPresets('some-other-factory', deductions)).toEqual([
+      { label: 'Lain', amount: 10000 }
     ]);
   });
 });

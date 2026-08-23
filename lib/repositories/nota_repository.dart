@@ -207,6 +207,18 @@ class NotaRepository {
     return (id == null || id.isEmpty) ? null : id;
   }
 
+  Future<NotaModel?> getNotaById(String id) async {
+    final response = await _client
+        .from('notas')
+        .select(
+          '*, relation_agents(*, relation_agent_accounts(*)), nota_items!left(count)',
+        )
+        .eq('id', id)
+        .maybeSingle();
+    if (response == null) return null;
+    return NotaModel.fromJson(response);
+  }
+
   Future<List<BonModel>> getNotaBons(String notaId) async {
     final response = await _client
         .from('nota_items')

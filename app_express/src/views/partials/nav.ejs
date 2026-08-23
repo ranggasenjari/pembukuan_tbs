@@ -64,6 +64,7 @@
 
 <header class="mobile-header">
   <div class="mobile-header-row">
+    <button id="mobile-menu-toggle" class="mobile-hamburger" aria-label="Buka menu"><i data-lucide="menu"></i></button>
     <a href="<%= url('/dashboard') %>" class="mobile-brand">
       <span class="brand-mark small">PT</span>
       <span>Pembukuan TBS</span>
@@ -72,14 +73,20 @@
       <button class="mobile-logout" aria-label="Keluar"><i data-lucide="log-out"></i></button>
     </form>
   </div>
-  <nav class="mobile-tabs">
-    <a href="<%= url('/dashboard') %>" class="chip">Dashboard</a>
-    <a href="<%= url('/bon-management') %>" class="chip">Manajemen</a>
-    <a href="<%= url('/relation-agents') %>" class="chip">Relasi</a>
-    <a href="<%= url('/bons') %>" class="chip">Bon</a>
-    <a href="<%= url('/notas') %>" class="chip">Nota</a>
-    <a href="<%= url('/payments') %>" class="chip">Bayar</a>
-    <a href="<%= url('/reports/ledger') %>" class="chip">Ledger</a>
-    <a href="<%= url('/reports/harian') %>" class="chip">Cetakan</a>
-  </nav>
 </header>
+
+<div id="mobile-overlay" class="mobile-overlay"></div>
+<script>
+  (function () {
+    function closeMobileNav() {
+      document.body.classList.remove('mobile-nav-open');
+    }
+    document.getElementById('mobile-menu-toggle')?.addEventListener('click', () => {
+      document.body.classList.toggle('mobile-nav-open');
+    });
+    document.getElementById('mobile-overlay')?.addEventListener('click', closeMobileNav);
+    document.querySelectorAll('.app-sidebar a').forEach((link) => {
+      link.addEventListener('click', closeMobileNav);
+    });
+  })();
+</script>

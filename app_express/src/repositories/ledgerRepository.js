@@ -34,52 +34,74 @@ async function getSummary(supabase, sinceDate) {
 }
 
 async function getLedger(supabase, filters = {}) {
-  let marginQuery = supabase
-    .from('margins')
-    .select(`
+  const marginSelect = `
+    *,
+    factories(name),
+    payments (
       *,
-      factories(name),
-      payments (
+      notas (
         *,
-        notas (
-          *,
-          nota_items (
-            bons (*, bon_deductions(*))
-          )
+        nota_items (
+          bons (*, bon_deductions(*))
         )
-      ),
-      expense_margins (
-        expenses (*)
       )
-    `)
-    .order('transaction_date', { ascending: false });
+    ),
+    expense_margins (
+      expenses (*)
+    )
+  `;
+  const marginSelectWithSubs = marginSelect.replace(
+    'bons (*, bon_deductions(*))',
+    'bons (*, bon_deductions(*), sub_notas(*))'
+  );
 
+  let marginQuery = supabase.from('margins').select(marginSelectWithSubs).order('transaction_date', { ascending: false });
   if (filters.start) marginQuery = marginQuery.gte('transaction_date', filters.start);
   if (filters.end) marginQuery = marginQuery.lte('transaction_date', `${filters.end}T23:59:59`);
 
-  const margins = assertNoError(await marginQuery);
+  let margins;
+  try {
+    margins = assertNoError(await marginQuery);
+  } catch (error) {
+    // Tabel sub_notas mungkin belum migrasi → fallback tanpa sub_notas.
+    let q = supabase.from('margins').select(marginSelect).order('transaction_date', { ascending: false });
+    if (filters.start) q = q.gte('transaction_date', filters.start);
+    if (filters.end) q = q.lte('transaction_date', `${filters.end}T23:59:59`);
+    margins = assertNoError(await q);
+  }
 
-  let inProgressQuery = supabase
-    .from('bons')
-    .select(`
-      *,
-      bon_deductions(*),
-      factories(name),
-      relation_agents(name),
-      nota_items (
-        notas (
-          *,
-          payments (*)
-        )
+  const inProgressSelect = `
+    *,
+    bon_deductions(*),
+    factories(name),
+    relation_agents(name),
+    nota_items (
+      notas (
+        *,
+        payments (*)
       )
-    `);
+    )
+  `;
+  const inProgressSelectWithSubs = inProgressSelect.replace(
+    'relation_agents(name),',
+    'relation_agents(name), sub_notas(*),'
+  );
 
+  let inProgressQuery = supabase.from('bons').select(inProgressSelectWithSubs);
   if (filters.start) inProgressQuery = inProgressQuery.gte('bon_date', filters.start);
   if (filters.end) inProgressQuery = inProgressQuery.lte('bon_date', `${filters.end}T23:59:59`);
-
   inProgressQuery = inProgressQuery.order('bon_date', { ascending: false });
 
-  const allBons = assertNoError(await inProgressQuery);
+  let allBons;
+  try {
+    allBons = assertNoError(await inProgressQuery);
+  } catch (error) {
+    let q = supabase.from('bons').select(inProgressSelect);
+    if (filters.start) q = q.gte('bon_date', filters.start);
+    if (filters.end) q = q.lte('bon_date', `${filters.end}T23:59:59`);
+    q = q.order('bon_date', { ascending: false });
+    allBons = assertNoError(await q);
+  }
 
   let inProgress = allBons.filter((bon) => {
     const notaItem = bon.nota_items && bon.nota_items[0];

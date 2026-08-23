@@ -14,6 +14,7 @@ import '../../models/nota_model.dart';
 import '../../models/payment_model.dart';
 import '../../models/factory_model.dart';
 import '../../models/relation_agent_model.dart';
+import '../../models/sub_nota_model.dart';
 import '../../providers/providers.dart';
 import '../notas/nota_detail_screen.dart';
 
@@ -41,6 +42,8 @@ class BonEntryScreen extends ConsumerStatefulWidget {
 }
 
 class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
+  static const String _ocrCancel = '__cancel__';
+  static const String _ocrDefault = '__default__';
   final _formKey = GlobalKey<FormState>();
   final _picker = ImagePicker();
 
@@ -75,6 +78,9 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
   final _dpController = TextEditingController();
   final List<({TextEditingController label, TextEditingController amount})>
   _deductionControllers = [];
+
+  List<SubNotaModel> _subNotas = [];
+  bool _subNotasLoading = true;
 
   void _setTextIfDifferent(TextEditingController controller, String value) {
     if (controller.text != value) {
@@ -180,7 +186,9 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       _pphController.text = '0';
       _fetchLatestPrice();
     }
-    _loadMasterData();
+    _masterDataFuture = _loadMasterData();
+
+    if (widget.bon != null) _loadSubNotas();
 
     _ticketNumberController.addListener(
       _toUpperCaseListener(_ticketNumberController),
@@ -213,22 +221,37 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     }
   }
 
-  Future<void> _handleInitialImage(File file) async {
+Future<void> _handleInitialImage(File file) async {
+    if (_masterDataFuture != null) {
+      await _masterDataFuture;
+    }
     final bytes = await file.readAsBytes();
     setState(() {
       _imageFile = XFile(file.path);
       _imageBytes = bytes;
       _ocrImageUrl = null;
     });
-    await _performOCR(bytes, file.path.split('/').last);
+    final factoryId = await _promptOcrFactorySelection();
+    if (!mounted) return;
+    if (factoryId == _ocrCancel) return;
+    await _performOCR(
+      bytes,
+      file.path.split('/').last,
+      factoryId: factoryId,
+    );
   }
 
   void _recalcPPh() {
     if (!_isReadOnly) {
       final netto = _netto2;
       final price = _price;
-      // Rule khusus: PT. AWAN ALAM ANUGRA → PPh & Uang Minum = 0
-      if (_selectedFactoryId == 'a536e3c0-7ea0-4003-9df0-c38721a9439b') {
+      // Rule khusus: Pabrik Pengurus → BP, PPh & Uang Minum = 0
+      if (_selectedFactoryId == '376b98eb-0eb4-4a4e-84aa-902429f85669') {
+        _setTextIfDifferent(_bpColtController, '0');
+        _setTextIfDifferent(_pphController, '0');
+        _setTextIfDifferent(_uangMinumController, '0');
+      } else if (_selectedFactoryId == 'a536e3c0-7ea0-4003-9df0-c38721a9439b') {
+        // Rule khusus: PT. AWAN ALAM ANUGRA → PPh & Uang Minum = 0
         _setTextIfDifferent(_pphController, '0');
         _setTextIfDifferent(_uangMinumController, '0');
       } else {
@@ -238,7 +261,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
           (0.0025 * (price * netto)).toInt().toString(),
         );
         // Update uang minum berdasarkan netto2
-        final uangMinumValue = netto > 8000 ? '20000' : '10000';
+        final uangMinumValue = netto > 7000 ? '20000' : '10000';
         _setTextIfDifferent(_uangMinumController, uangMinumValue);
       }
     }
@@ -285,6 +308,8 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       }
     } catch (_) {}
   }
+
+  Future<void>? _masterDataFuture;
 
   Future<void> _loadMasterData() async {
     try {
@@ -335,20 +360,6 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     return null;
   }
 
-  void _selectRelation(String? relationId) {
-    RelationAgentModel? relation;
-    for (final item in _relationAgents) {
-      if (item.id == relationId) {
-        relation = item;
-        break;
-      }
-    }
-    setState(() {
-      _selectedRelationAgentId = relationId;
-      _relationNameController.text = relation?.name ?? '';
-    });
-  }
-
   void _selectFactory(String? factoryId) {
     setState(() {
       _selectedFactoryId = factoryId;
@@ -371,6 +382,19 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
               defaultPrice.price.toInt().toString(),
             );
           }
+        }
+        // Auto-pilih SPSI default pabrik (tabel tidak punya flag default → ambil pertama)
+        final factory = _factories
+            .where((f) => f.id == factoryId)
+            .firstOrNull;
+        final spsiList = factory?.spsiTypes ?? const [];
+        if (spsiList.isNotEmpty) {
+          final first = spsiList.first;
+          _selectedSpsiTypeId = first.id;
+          _setTextIfDifferent(
+            _biayaBongkarController,
+            first.amount.toInt().toString(),
+          );
         }
       }
     });
@@ -443,34 +467,128 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+Future<void> _pickImage(ImageSource source) async {
     final picked = await _picker.pickImage(source: source);
     if (picked != null) {
+      if (_masterDataFuture != null) {
+        await _masterDataFuture;
+      }
       final bytes = await picked.readAsBytes();
       setState(() {
         _imageFile = picked;
         _imageBytes = bytes;
         _ocrImageUrl = null;
       });
-      // Perform OCR
-      await _performOCR(bytes, picked.name);
+      final factoryId = await _promptOcrFactorySelection();
+      if (!mounted) return;
+      if (factoryId == _ocrCancel) return;
+      // Perform OCR sesuai pengaturan pabrik yang dipilih
+      await _performOCR(bytes, picked.name, factoryId: factoryId);
     }
   }
 
-  Future<void> _performOCR(Uint8List bytes, String fileName) async {
+  Future<String> _promptOcrFactorySelection() async {
+    // Deklarasi di luar builder agar pilihan user tidak hilang saat setDialogState rebuild.
+    String? selected = _selectedFactoryId ?? _ocrDefault;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Pilih Pabrik'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Pilih pabrik agar OCR menggunakan prompt & schema '
+                  'khususnya (bila tersedia).',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: selected,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Pabrik',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: _ocrDefault,
+                      child: Text('(Default)', overflow: TextOverflow.ellipsis),
+                    ),
+                    ..._factories.map(
+                      (factory) => DropdownMenuItem<String>(
+                        value: factory.id,
+                        child: Text(
+                          factory.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => selected = value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, _ocrCancel),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, selected),
+                child: const Text('Proses OCR'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return result ?? _ocrCancel;
+  }
+
+  Future<void> _performOCR(
+    Uint8List bytes,
+    String fileName, {
+    String? factoryId,
+  }) async {
     setState(() => _isProcessing = true);
 
     try {
       final settings = await ref
           .read(ocrSettingsRepositoryProvider)
           .getSettings();
+      final effectiveFactoryId = (factoryId == null ||
+              factoryId.isEmpty ||
+              factoryId == _ocrDefault)
+          ? null
+          : factoryId;
+      final factory = effectiveFactoryId == null
+          ? null
+          : _factories
+                .where((f) => f.id == effectiveFactoryId)
+                .firstOrNull;
+      final factorySettings =
+          effectiveFactoryId == null
+              ? null
+              : settings.factorySettings[effectiveFactoryId];
       final result = await ref.read(ocrServiceProvider).processBonImage(
             bytes: bytes,
             fileName: fileName,
             settings: settings,
+            factoryName: factory?.name,
+            factorySettings: factorySettings,
           );
 
-      _applyOcrData(result.data, imageUrl: result.imageUrl);
+      _applyOcrData(
+        result.data,
+        imageUrl: result.imageUrl,
+        forcedFactoryId: effectiveFactoryId,
+      );
+      if (effectiveFactoryId != null) _recalcPPh();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -497,7 +615,11 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     }
   }
 
-  void _applyOcrData(Map<String, dynamic> bonData, {String? imageUrl}) {
+  void _applyOcrData(
+    Map<String, dynamic> bonData, {
+    String? imageUrl,
+    String? forcedFactoryId,
+  }) {
     setState(() {
       if (imageUrl != null && imageUrl.isNotEmpty) {
         _ocrImageUrl = imageUrl;
@@ -534,13 +656,17 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
         _netto2Controller.text = bonData['netto_2'].toString();
       }
       _selectedRelationAgentId = _matchRelationIdByName();
-      if (bonData['factory_name'] != null) {
-        _selectedFactoryId = _matchFactoryIdByName(
-          bonData['factory_name'].toString(),
-        );
-        _selectedSpsiTypeId = null;
-      }
+      _selectedSpsiTypeId = null;
     });
+    // Pabrik hasil OCR: terapkan ke form (field pabrik, SPSI, harga default).
+    if (forcedFactoryId != null && forcedFactoryId.isNotEmpty) {
+      _selectFactory(forcedFactoryId);
+    } else if (bonData['factory_name'] != null) {
+      final matched = _matchFactoryIdByName(
+        bonData['factory_name'].toString(),
+      );
+      if (matched != null) _selectFactory(matched);
+    }
   }
 
   void _showImagePickerOptions() {
@@ -761,6 +887,280 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
   bool get _isReadOnly =>
       widget.bon != null && widget.bon!.status == PaymentStatus.lunas;
 
+  Future<void> _loadSubNotas() async {
+    if (widget.bon == null) return;
+    try {
+      final list = await ref
+          .read(subNotaRepositoryProvider)
+          .getByBon(widget.bon!.id);
+      if (mounted) {
+        setState(() {
+          _subNotas = list;
+          _subNotasLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _subNotasLoading = false);
+    }
+  }
+
+  Future<void> _showAddSubNotaDialog() async {
+    final bon = widget.bon!;
+    final nameCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final currencyFmt = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final price = int.tryParse(priceCtrl.text) ?? 0;
+          final total = bon.netto2.toInt() * price;
+          return AlertDialog(
+            title: const Text('Tambah Sub Nota'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nameCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Nama',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Wajib diisi'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: priceCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Harga (Rp/kg)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                      validator: (v) {
+                        final value = int.tryParse(v ?? '');
+                        if (value == null || value <= 0) {
+                          return 'Harus lebih dari 0';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: notesCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Catatan (opsional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Netto 2: ${bon.netto2.toInt()} kg',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Total (murni, tanpa potongan): '
+                            '${currencyFmt.format(total)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  try {
+                    await ref.read(subNotaRepositoryProvider).create(
+                      bonId: bon.id,
+                      name: nameCtrl.text.trim(),
+                      pricePerKg: int.tryParse(priceCtrl.text) ?? 0,
+                      netto2: bon.netto2.toInt(),
+                      notes: notesCtrl.text.trim(),
+                    );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    await _loadSubNotas();
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('Gagal menyimpan: $e')),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Simpan'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _deleteSubNota(SubNotaModel sub) async {
+    final currencyFmt = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Sub Nota'),
+        content: Text(
+          'Hapus ${sub.name} '
+          '(${currencyFmt.format(sub.amount)})?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(subNotaRepositoryProvider).delete(sub.id);
+      await _loadSubNotas();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+      }
+    }
+  }
+
+  Widget _buildSubNotaSection() {
+    final currencyFmt = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: _buildSectionCard(
+        title: 'Sub Nota',
+        icon: Icons.handshake_outlined,
+        children: [
+          if (_subNotasLoading)
+            const LinearProgressIndicator()
+          else if (_subNotas.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Belum ada sub nota.',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+            )
+          else ...[
+            ..._subNotas.map(
+              (sub) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  sub.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                subtitle: Text(
+                  '${sub.netto2} kg x Rp '
+                  '${NumberFormat.decimalPattern().format(sub.pricePerKg)}'
+                  '${sub.notes != null && sub.notes!.isNotEmpty ? ' - ${sub.notes}' : ''}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      currencyFmt.format(sub.amount),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (!_isReadOnly) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: () => _deleteSubNota(sub),
+                        icon: Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: Colors.red.shade300,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 8),
+          ],
+          if (!_isReadOnly)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _showAddSubNotaDialog,
+                icon: const Icon(Icons.add_circle_outline, size: 18),
+                label: const Text('Tambah Sub Nota'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -803,6 +1203,7 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
                         const SizedBox(height: 16),
                         if (_isReadOnly) _buildReadOnlyWarning(),
                         _buildRelatedDocuments(),
+                        if (widget.bon != null) _buildSubNotaSection(),
                         _buildSectionCard(
                           title: 'Info Kendaraan & Supir',
                           icon: Icons.local_shipping_outlined,
@@ -948,6 +1349,10 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
                                 ),
                               ],
                             ),
+                            if (!_isReadOnly) ...[
+                              const SizedBox(height: 12),
+                              _buildFactoryPricePills(),
+                            ],
                             const SizedBox(height: 24),
                             _buildCalcRow(
                               'Subtotal (Netto 2 x Harga)',
@@ -1204,6 +1609,68 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
     );
   }
 
+  Widget _buildFactoryPricePills() {
+    if (_selectedFactoryId == null) return const SizedBox.shrink();
+    final factory = _factories
+        .where((f) => f.id == _selectedFactoryId)
+        .firstOrNull;
+    final prices = factory?.prices ?? const <FactoryPrice>[];
+    if (prices.isEmpty) return const SizedBox.shrink();
+    final currencyFmt = NumberFormat.decimalPattern('id_ID');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Jenis Harga Pabrik',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: prices.map((p) {
+            final active = _price.toInt() == p.price.toInt();
+            return InkWell(
+              onTap: () {
+                setState(() {
+                  _priceController.text = p.price.toInt().toString();
+                });
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: active ? const Color(0xFF4318FF) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: active
+                        ? const Color(0xFF4318FF)
+                        : Colors.grey.shade300,
+                  ),
+                ),
+                child: Text(
+                  '${p.name}: ${currencyFmt.format(p.price.toInt())}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: active ? Colors.white : const Color(0xFF1B2559),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSectionCard({
     required String title,
     required IconData icon,
@@ -1247,50 +1714,172 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
   }
 
   Widget _buildRelationDropdown() {
-    return DropdownButtonFormField<String>(
-      key: ValueKey('relation-$_selectedRelationAgentId'),
+    return FormField<String>(
+      key: ValueKey('relation-form-$_selectedRelationAgentId'),
       initialValue: _selectedRelationAgentId,
-      isExpanded: true,
-      decoration: _inputDecoration(
-        label: 'Relasi / Agen',
-        icon: Icons.business_outlined,
-      ),
-      items: [
-        const DropdownMenuItem<String>(
-          value: null,
-          child: Text('Pilih Relasi / Agen'),
-        ),
-        ..._relationAgents.map(
-          (item) => DropdownMenuItem<String>(
-            value: item.id,
-            child: Text(item.name, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-        const DropdownMenuItem<String>(
-          value: '__add_new__',
-          child: Row(
-            children: [
-              Icon(Icons.add_circle_outline, size: 18, color: Colors.indigo),
-              SizedBox(width: 8),
-              Text(
-                'Tambah Relasi Baru...',
-                style: TextStyle(color: Colors.indigo),
-              ),
-            ],
-          ),
-        ),
-      ],
-      onChanged: _isReadOnly
-          ? null
-          : (value) {
-              if (value == '__add_new__') {
-                _showAddRelationDialog();
-              } else {
-                _selectRelation(value);
-              }
-            },
       validator: (value) =>
           value == null || value.isEmpty ? 'Wajib diisi' : null,
+      builder: (state) {
+        final selectedAgent = _relationAgents
+            .where((a) => a.id == _selectedRelationAgentId)
+            .firstOrNull;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              readOnly: true,
+              onTap: _isReadOnly ? null : _showRelationSearchBottomSheet,
+              controller: TextEditingController(text: selectedAgent?.name ?? ''),
+              decoration: _inputDecoration(
+                label: 'Relasi / Agen',
+                icon: Icons.business_outlined,
+                hint: 'Ketik untuk mencari...',
+              ),
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1B2559),
+              ),
+            ),
+            if (state.hasError)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, left: 12),
+                child: Text(
+                  state.errorText ?? '',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showRelationSearchBottomSheet() async {
+    String query = '';
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final filtered = _relationAgents
+                .where((a) =>
+                    a.name.toLowerCase().contains(query.toLowerCase()))
+                .toList();
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Cari nama relasi...',
+                        prefixIcon:
+                            const Icon(Icons.search, color: Colors.grey),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF4318FF), width: 1.5),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        isDense: true,
+                      ),
+                      onChanged: (v) => setSheetState(() => query = v),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: filtered.length + 1,
+                      separatorBuilder: (_, __) =>
+                          Divider(height: 1, color: Colors.grey.shade200),
+                      itemBuilder: (ctx, index) {
+                        if (index == 0) {
+                          return ListTile(
+                            leading: const Icon(Icons.add_circle_outline,
+                                color: Color(0xFF4318FF), size: 22),
+                            title: const Text(
+                              '+ Tambah Relasi Baru',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF4318FF),
+                                fontSize: 14,
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _showAddRelationDialog();
+                            },
+                          );
+                        }
+                        final agent = filtered[index - 1];
+                        final isSelected = agent.id == _selectedRelationAgentId;
+                        return ListTile(
+                          leading: isSelected
+                              ? const Icon(Icons.check_circle,
+                                  color: Color(0xFF4318FF), size: 22)
+                              : const Icon(Icons.radio_button_unchecked,
+                                  color: Colors.grey, size: 22),
+                          title: Text(
+                            agent.name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight:
+                                  isSelected ? FontWeight.w600 : FontWeight.normal,
+                              color: isSelected
+                                  ? const Color(0xFF4318FF)
+                                  : const Color(0xFF1B2559),
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            setState(() {
+                              _selectedRelationAgentId = agent.id;
+                              _relationNameController.text = agent.name;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1363,7 +1952,14 @@ class _BonEntryScreenState extends ConsumerState<BonEntryScreen> {
       ),
     );
     if (result != null && mounted) {
-      _selectRelation(result.id);
+      // Relasi baru langsung tampil & terpilih tanpa perlu OCR ulang.
+      setState(() {
+        if (!_relationAgents.any((r) => r.id == result.id)) {
+          _relationAgents.add(result);
+        }
+        _selectedRelationAgentId = result.id;
+        _relationNameController.text = result.name;
+      });
     }
   }
 

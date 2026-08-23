@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../models/payment_relation_model.dart';
 import '../../providers/providers.dart';
 import 'payment_relation_entry_screen.dart';
@@ -39,7 +40,7 @@ class _PaymentRelationListScreenState
             PaymentRelationEntryScreen(paymentRelation: paymentRelation),
       ),
     );
-    if (result == true) _refresh();
+    if (result is PaymentRelationModel || result == true) _refresh();
   }
 
   @override
@@ -195,18 +196,103 @@ class _PaymentRelationListScreenState
                   style: TextStyle(color: Colors.grey.shade700),
                 ),
               ],
+              if (item.fee != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text(
+                      'FEE',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.6,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      NumberFormat.currency(
+                        locale: 'id_ID',
+                        symbol: 'Rp ',
+                        decimalDigits: 0,
+                      ).format(item.fee),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1B2559),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: [
-                  Chip(label: Text('${item.vehicles.length} Kendaraan')),
-                  Chip(label: Text('${item.accounts.length} Rekening')),
-                ],
+              _smallList(
+                'Kendaraan',
+                item.vehicles
+                    .map((vehicle) {
+                      final plate =
+                          vehicle.vehicle?.plateNumber ?? vehicle.vehicleId;
+                      final driver = vehicle.vehicle?.driverName;
+                      return driver?.isNotEmpty == true
+                          ? '$plate — $driver'
+                          : plate;
+                    })
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              _smallList(
+                'Rekening',
+                item.accounts
+                    .map(
+                      (account) => [
+                        if (account.bankName.isNotEmpty) account.bankName,
+                        if (account.accountNumber.isNotEmpty) account.accountNumber,
+                        if (account.accountName.isNotEmpty) account.accountName,
+                      ].join(' · '),
+                    )
+                    .toList(),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _smallList(String label, List<String> items) {
+    final rows = items.where((item) => item.trim().isNotEmpty).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.6,
+            color: Colors.grey.shade500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        if (rows.isEmpty)
+          Text(
+            'Belum ada data',
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+          )
+        else
+          ...rows.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                item,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF334155),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

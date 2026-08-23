@@ -35,6 +35,10 @@
         <input name="harga" value="<%= item.harga ?? '' %>" type="number" class="form-input" placeholder="Kosongkan/0 = tidak khusus">
         <span class="text-xs text-slate-400 mt-1">Isi <b>di luar -100 s.d. 100</b> = harga tetap. Isi <b>antara -100 s.d. 100</b> = selisih dari harga pabrik (contoh: -10 berarti harga pabrik -10, 20 berarti harga pabrik +20)</span>
       </label>
+      <label>
+        <span class="form-label">Uang Minum (Rp)</span>
+        <input name="uang_minum" value="<%= item.uang_minum ?? '' %>" type="number" class="form-input" placeholder="Kosongkan = ikut relasi bayar / default">
+      </label>
       <label class="flex items-center gap-2 mt-2">
         <input type="checkbox" name="is_super" value="1" <%= item.is_super ? 'checked' : '' %> class="form-checkbox">
         <span class="text-sm">Buah Super</span>

@@ -9,7 +9,7 @@ class PaymentRelationRepository {
   Future<List<PaymentRelationModel>> getPaymentRelations({String? query}) async {
     var request = _client
         .from('payment_relations')
-        .select('*, payment_relation_accounts(*), payment_relation_vehicles(*, vehicles(*))');
+        .select('*, payment_relation_accounts(*), payment_relation_vehicles(*, vehicles(*)), payment_relation_hutang(*), payment_relation_rolling(*), payment_relation_giringan(*)');
 
     if (query != null && query.trim().isNotEmpty) {
       final q = query.trim();
@@ -57,6 +57,18 @@ class PaymentRelationRepository {
         .from('payment_relation_vehicles')
         .delete()
         .eq('payment_relation_id', id);
+    await _client
+        .from('payment_relation_hutang')
+        .delete()
+        .eq('payment_relation_id', id);
+    await _client
+        .from('payment_relation_rolling')
+        .delete()
+        .eq('payment_relation_id', id);
+    await _client
+        .from('payment_relation_giringan')
+        .delete()
+        .eq('payment_relation_id', id);
     await _client.from('payment_relations').delete().eq('id', id);
   }
 
@@ -67,6 +79,18 @@ class PaymentRelationRepository {
         .eq('payment_relation_id', paymentRelation.id);
     await _client
         .from('payment_relation_vehicles')
+        .delete()
+        .eq('payment_relation_id', paymentRelation.id);
+    await _client
+        .from('payment_relation_hutang')
+        .delete()
+        .eq('payment_relation_id', paymentRelation.id);
+    await _client
+        .from('payment_relation_rolling')
+        .delete()
+        .eq('payment_relation_id', paymentRelation.id);
+    await _client
+        .from('payment_relation_giringan')
         .delete()
         .eq('payment_relation_id', paymentRelation.id);
 
@@ -87,8 +111,38 @@ class PaymentRelationRepository {
         .where((item) => item.vehicleId.isNotEmpty)
         .map((item) => item.toJson()..remove('id'))
         .toList();
+    for (final row in vehicleRows) {
+      await _client
+          .from('payment_relation_vehicles')
+          .delete()
+          .eq('vehicle_id', row['vehicle_id']);
+    }
     if (vehicleRows.isNotEmpty) {
       await _client.from('payment_relation_vehicles').insert(vehicleRows);
+    }
+
+    final hutang = paymentRelation.hutang
+        .where((item) => item.amount != 0)
+        .map((item) => item.toJson()..remove('id'))
+        .toList();
+    if (hutang.isNotEmpty) {
+      await _client.from('payment_relation_hutang').insert(hutang);
+    }
+
+    final rolling = paymentRelation.rolling
+        .where((item) => item.amount != 0)
+        .map((item) => item.toJson()..remove('id'))
+        .toList();
+    if (rolling.isNotEmpty) {
+      await _client.from('payment_relation_rolling').insert(rolling);
+    }
+
+    final giringan = paymentRelation.giringan
+        .where((item) => item.name.isNotEmpty)
+        .map((item) => item.toJson()..remove('id'))
+        .toList();
+    if (giringan.isNotEmpty) {
+      await _client.from('payment_relation_giringan').insert(giringan);
     }
   }
 }

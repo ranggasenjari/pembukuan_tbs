@@ -3,6 +3,22 @@ const { PAYMENT_STATUS, nowInvoiceNumber } = require('../services/calculations')
 const relationAgentRepository = require('./relationAgentRepository');
 const { notifyChange } = require('../services/realtimeService');
 
+const CHUNK = 80;
+
+// Ambil invoice_id dari banyak bon secara ber-batch agar URL PostgREST
+// tidak melebihi batas panjang server.
+async function collectInvoiceIdsForBons(supabase, bonIds) {
+  const notaIds = new Set();
+  for (let i = 0; i < bonIds.length; i += CHUNK) {
+    const chunk = bonIds.slice(i, i + CHUNK);
+    const items = assertNoError(
+      await supabase.from('nota_items').select('invoice_id').in('bon_id', chunk)
+    );
+    items.forEach((item) => notaIds.add(item.invoice_id));
+  }
+  return [...notaIds];
+}
+
 async function resolveRecipient(supabase, body) {
   if (body.relation_agent_id) {
     const relation = await relationAgentRepository.getRelationAgent(supabase, body.relation_agent_id);
@@ -20,38 +36,41 @@ async function resolveRecipient(supabase, body) {
 }
 
 async function listNotas(supabase, filters = {}) {
-  let query = supabase.from('notas').select('*, nota_items(bon_id, bons(plate_number, driver_name, netto_2, total)), relation_agents(name)');
-  query = applyDateRange(query, 'invoice_date', filters.start, filters.end);
+  const buildQuery = (ids) => {
+    let q = supabase.from('notas').select('*, nota_items(bon_id, bons(plate_number, driver_name, netto_2, total)), relation_agents(name)');
+    q = applyDateRange(q, 'invoice_date', filters.start, filters.end);
+    if (ids) q = q.in('id', ids);
+    return q.order('created_at', { ascending: false });
+  };
 
+  if (!filters.q && !filters.factory_id) {
+    return assertNoError(await buildQuery(null));
+  }
+
+  let bonIds;
   if (filters.q) {
     const bons = assertNoError(
       await supabase.from('bons').select('id').ilike('driver_name', `%${filters.q}%`)
     );
-    const bonIds = bons.map((bon) => bon.id);
-    if (bonIds.length === 0) return [];
-    const items = assertNoError(
-      await supabase.from('nota_items').select('invoice_id').in('bon_id', bonIds)
-    );
-    const notaIds = [...new Set(items.map((item) => item.invoice_id))];
-    if (notaIds.length === 0) return [];
-    query = query.in('id', notaIds);
+    bonIds = bons.map((bon) => bon.id);
+  } else {
+    // Batasi pencarian bon ke rentang tanggal yang sama agar daftar id tetap kecil.
+    let bonsQuery = supabase.from('bons').select('id').eq('factory_id', filters.factory_id);
+    bonsQuery = applyDateRange(bonsQuery, 'bon_date', filters.start, filters.end);
+    const bons = assertNoError(await bonsQuery);
+    bonIds = bons.map((bon) => bon.id);
   }
+  if (bonIds.length === 0) return [];
 
-  if (filters.factory_id) {
-    const bons = assertNoError(
-      await supabase.from('bons').select('id').eq('factory_id', filters.factory_id)
-    );
-    const bonIds = bons.map((bon) => bon.id);
-    if (bonIds.length === 0) return [];
-    const items = assertNoError(
-      await supabase.from('nota_items').select('invoice_id').in('bon_id', bonIds)
-    );
-    const notaIds = [...new Set(items.map((item) => item.invoice_id))];
-    if (notaIds.length === 0) return [];
-    query = query.in('id', notaIds);
+  const notaIds = await collectInvoiceIdsForBons(supabase, bonIds);
+  if (notaIds.length === 0) return [];
+
+  const notas = [];
+  for (let i = 0; i < notaIds.length; i += CHUNK) {
+    notas.push(...assertNoError(await buildQuery(notaIds.slice(i, i + CHUNK))));
   }
-
-  return assertNoError(await query.order('created_at', { ascending: false }));
+  notas.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  return notas;
 }
 
 async function searchNotasByRecipient(supabase, recipientName, filters = {}) {

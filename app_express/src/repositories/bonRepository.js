@@ -1,5 +1,5 @@
 const { applyDateRange, assertNoError } = require('./base');
-const { PAYMENT_STATUS } = require('../services/calculations');
+const { PAYMENT_STATUS, applyFactoryDeductionPresets } = require('../services/calculations');
 const { notifyChange } = require('../services/realtimeService');
 
 function serializeBon(body, calculated, imageUrl) {
@@ -70,10 +70,11 @@ async function createBon(supabase, data, deductions = []) {
     await supabase.from('bons').insert(data).select().single()
   );
 
-  if (deductions.length > 0) {
+  const deductionsToSave = applyFactoryDeductionPresets(data.factory_id, deductions);
+  if (deductionsToSave.length > 0) {
     assertNoError(
       await supabase.from('bon_deductions').insert(
-        deductions.map((item) => ({
+        deductionsToSave.map((item) => ({
           bon_id: created.id,
           label: item.label,
           amount: item.amount

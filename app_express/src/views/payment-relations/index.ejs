@@ -14,9 +14,9 @@
 
 <div class="table-card">
   <table>
-    <thead><tr><th>Nama</th><th>Kontak</th><th>Kendaraan</th><th>Rekening</th><th></th></tr></thead>
+    <thead><tr><th>Nama</th><th>Kontak</th><th>Fee</th><th>Kendaraan</th><th>Rekening</th><th></th></tr></thead>
     <tbody>
-      <% if (!paymentRelations.length) { %><tr><td colspan="5" class="empty">Belum ada data relasi bayar.</td></tr><% } %>
+      <% if (!paymentRelations.length) { %><tr><td colspan="6" class="empty">Belum ada data relasi bayar.</td></tr><% } %>
       <% paymentRelations.forEach((item) => { %>
         <% const vehicleCount = (item.payment_relation_vehicles || []).length; %>
         <% const accountCount = (item.payment_relation_accounts || []).length; %>
@@ -27,6 +27,7 @@
             <% if (item.notes) { %><div class="text-xs text-slate-400"><%= item.notes %></div><% } %>
           </td>
           <td><%= item.contact || '-' %></td>
+          <td class="text-right"><%= item.fee != null ? format.currency(item.fee) : '-' %></td>
           <td class="text-xs">
             <% const vehicles = (item.payment_relation_vehicles || []).filter(v => v.vehicles?.plate_number); %>
             <% if (vehicles.length) { %>

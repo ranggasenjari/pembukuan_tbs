@@ -82,6 +82,7 @@ class _BonListScreenState extends ConsumerState<BonListScreen> {
   final Set<String> _expandedCardIds = {};
   bool _selectMode = false;
   final Set<String> _selectedBonIds = {};
+  final Map<String, Future<NotaModel?>> _notaFutures = {};
 
   @override
   void initState() {
@@ -114,21 +115,47 @@ class _BonListScreenState extends ConsumerState<BonListScreen> {
     });
   }
 
-  Future<NotaModel?> _getNotaForBon(String bonId) async {
+  Future<NotaModel?> _getNotaForBon(String bonId) {
+    return _notaFutures.putIfAbsent(bonId, () => _loadNotaForBon(bonId));
+  }
+
+  Future<NotaModel?> _loadNotaForBon(String bonId) async {
     try {
-      final notas = await ref.read(notaRepositoryProvider).getNotas();
-      for (var nota in notas) {
-        final bons = await ref
-            .read(notaRepositoryProvider)
-            .getNotaBons(nota.id);
-        if (bons.any((b) => b.id == bonId)) {
-          return nota;
-        }
-      }
-      return null;
+      final notaId = await ref
+          .read(notaRepositoryProvider)
+          .getNotaIdByBonId(bonId);
+      if (notaId == null) return null;
+      return await ref.read(notaRepositoryProvider).getNotaById(notaId);
     } catch (_) {
       return null;
     }
+  }
+
+  Future<void> _openNotaForBon(String bonId, NotaModel? nota) async {
+    final resolved = nota ?? await _getNotaForBon(bonId);
+    if (!mounted) return;
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nota terkait tidak ditemukan')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => NotaDetailScreen(nota: resolved)),
+    );
+  }
+
+  Future<void> _shareNotaForBon(String bonId, NotaModel? nota) async {
+    final resolved = nota ?? await _getNotaForBon(bonId);
+    if (!mounted) return;
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nota terkait tidak ditemukan')),
+      );
+      return;
+    }
+    _shareNotaWhatsappAsync(resolved);
   }
 
   void _createNotaSatuan(BonModel bon) async {
@@ -727,17 +754,7 @@ class _BonListScreenState extends ConsumerState<BonListScreen> {
               icon: const Icon(Icons.merge_type),
               label: Text('Gabung Nota (${_selectedBonIds.length})'),
             )
-          : FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const BonEntryScreen()),
-                ).then((_) => _refreshBons());
-              },
-              backgroundColor: Colors.amber,
-              icon: const Icon(Icons.add),
-              label: const Text('Input Bon Baru'),
-            ),
+          : null,
     );
   }
 
@@ -822,30 +839,55 @@ class _BonListScreenState extends ConsumerState<BonListScreen> {
             'Tonase',
             Colors.teal,
           ),
+          _statDivider(),
+          _statItem(
+            Icons.add_circle_outline,
+            'Baru',
+            'Input Bon',
+            Colors.amber,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BonEntryScreen()),
+              ).then((_) => _refreshBons());
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _statItem(IconData icon, String value, String label, Color color) {
+  Widget _statItem(
+    IconData icon,
+    String value,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+        ),
+      ],
+    );
+    if (onTap == null) return Expanded(child: content);
     return Expanded(
-      child: Column(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: color,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-          ),
-        ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: content,
       ),
     );
   }
@@ -1308,17 +1350,8 @@ class _BonListScreenState extends ConsumerState<BonListScreen> {
                                                 ),
                                               ),
                                             OutlinedButton.icon(
-                                              onPressed: nota != null
-                                                  ? () => Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (_) =>
-                                                            NotaDetailScreen(
-                                                              nota: nota,
-                                                            ),
-                                                      ),
-                                                    )
-                                                  : null,
+                                              onPressed: () =>
+                                                  _openNotaForBon(bon.id, nota),
                                               icon: const Icon(
                                                 Icons.description,
                                                 size: 14,
@@ -1340,37 +1373,20 @@ class _BonListScreenState extends ConsumerState<BonListScreen> {
                                               ),
                                             ),
                                             const SizedBox(width: 2),
-                                            FutureBuilder<List<BonModel>>(
-                                              future: nota != null
-                                                  ? ref
-                                                        .read(
-                                                          notaRepositoryProvider,
-                                                        )
-                                                        .getNotaBons(nota.id)
-                                                  : null,
-                                              builder: (context, snap) {
-                                                if (snap.data == null)
-                                                  return const SizedBox.shrink();
-                                                final notaBons = snap.data!;
-                                                return IconButton(
-                                                  icon: const Icon(
-                                                    Icons.chat_outlined,
-                                                    size: 18,
-                                                    color: Colors.green,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _shareNotaWhatsapp(
-                                                        nota!,
-                                                        notaBons,
-                                                      ),
-                                                  visualDensity:
-                                                      VisualDensity.compact,
-                                                  padding: EdgeInsets.zero,
-                                                  constraints:
-                                                      const BoxConstraints(),
-                                                  tooltip: 'Share WhatsApp',
-                                                );
-                                              },
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.chat_outlined,
+                                                size: 18,
+                                                color: Colors.green,
+                                              ),
+                                              onPressed: () =>
+                                                  _shareNotaForBon(bon.id, nota),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                              constraints:
+                                                  const BoxConstraints(),
+                                              tooltip: 'Share WhatsApp',
                                             ),
                                             const SizedBox(width: 4),
                                             IconButton(
@@ -1754,5 +1770,19 @@ class _BonListScreenState extends ConsumerState<BonListScreen> {
       Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}'),
       mode: LaunchMode.externalApplication,
     );
+  }
+
+  Future<void> _shareNotaWhatsappAsync(NotaModel nota) async {
+    try {
+      final notaBons = await ref.read(notaRepositoryProvider).getNotaBons(nota.id);
+      if (!mounted) return;
+      _shareNotaWhatsapp(nota, notaBons);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gagal memuat data bon nota')),
+        );
+      }
+    }
   }
 }

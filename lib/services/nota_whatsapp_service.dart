@@ -33,20 +33,34 @@ class NotaWhatsappService {
 
       lines.add('   *Potongan:*');
       if (bon.spsiAmount > 0) {
-        lines.add('      SPSI: ${_currency.format(bon.spsiAmount)}');
+        final mode = bon.spsiCalculationMode.trim().toUpperCase();
+        if (mode == 'FIX') {
+          lines.add('      SPSI:');
+          lines.add('        ${_currency.format(bon.spsiAmount)}');
+        } else {
+          final rate = bon.spsiRate != 0 ? bon.spsiRate : bon.biayaBongkar;
+          lines.add('      SPSI:');
+          lines.add(
+            '        ${bon.netto1.toInt()} kg x ${_currency.format(rate)} = ${_currency.format(bon.spsiAmount)}',
+          );
+        }
       }
       if (bon.bpColt > 0) {
-        lines.add('      BP/Colt: ${_currency.format(bon.bpColt)}');
+        lines.add('      BP/Colt:');
+        lines.add('        ${_currency.format(bon.bpColt)}');
       }
       if (bon.pph > 0) {
-        lines.add('      PPh: ${_currency.format(bon.pph)}');
+        lines.add('      PPh (0,25%):');
+        lines.add('        ${_currency.format(bon.pph)}');
       }
       if (bon.uangMinum > 0) {
-        lines.add('      Uang Minum: ${_currency.format(bon.uangMinum)}');
+        lines.add('      Uang Minum:');
+        lines.add('        ${_currency.format(bon.uangMinum)}');
       }
       for (final d in bon.deductions) {
         if (d.amount > 0) {
-          lines.add('      ${d.label}: ${_currency.format(d.amount.toDouble())}');
+          lines.add('      ${d.label}:');
+          lines.add('        ${_currency.format(d.amount.toDouble())}');
         }
       }
       lines.add('   *Total bon: ${_currency.format(bonTotalBeforeDp)}*');

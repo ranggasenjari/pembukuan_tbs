@@ -5,9 +5,28 @@ const PAYMENT_STATUS = {
 };
 
 const FACTORY_ZERO_PPH_UANGMINUM = 'a536e3c0-7ea0-4003-9df0-c38721a9439b';
+const FACTORY_PENGURUS_DEDUCTION = '376b98eb-0eb4-4a4e-84aa-902429f85669';
+const PENGURUS_DEDUCTION_LABEL = 'Pengurus';
+const PENGURUS_DEDUCTION_AMOUNT = 50000;
 
 function isZeroPphUangMinum(factoryId) {
   return factoryId === FACTORY_ZERO_PPH_UANGMINUM;
+}
+
+function isPengurusFactory(factoryId) {
+  return factoryId === FACTORY_PENGURUS_DEDUCTION;
+}
+
+function applyFactoryDeductionPresets(factoryId, deductions) {
+  const list = (Array.isArray(deductions) ? deductions : [])
+    .map((item) => ({ label: String(item.label || ''), amount: toInt(item.amount) }));
+  if (
+    isPengurusFactory(factoryId) &&
+    !list.some((item) => item.label.trim().toUpperCase() === PENGURUS_DEDUCTION_LABEL.toUpperCase())
+  ) {
+    list.push({ label: PENGURUS_DEDUCTION_LABEL, amount: PENGURUS_DEDUCTION_AMOUNT });
+  }
+  return list;
 }
 
 function toNumber(value, fallback = 0) {
@@ -56,10 +75,12 @@ function calculateBon(input) {
 
   const factoryId = input.factory_id || null;
   const zeroPphUm = isZeroPphUangMinum(factoryId);
-  const pph = zeroPphUm ? 0 : (input.pph === undefined || input.pph === ''
+  const pengurusFactory = isPengurusFactory(factoryId);
+  const zeroPphUangMinum = zeroPphUm || pengurusFactory;
+  const pph = zeroPphUangMinum ? 0 : (input.pph === undefined || input.pph === ''
     ? Math.floor(0.0025 * price * netto2)
     : toInt(input.pph));
-  const uangMinum = zeroPphUm ? 0 : (input.uang_minum === undefined || input.uang_minum === ''
+  const uangMinum = zeroPphUangMinum ? 0 : (input.uang_minum === undefined || input.uang_minum === ''
     ? (netto2 > 7000 ? 20000 : 10000)
     : toInt(input.uang_minum));
   const deductions = input.deductions || [];
@@ -98,6 +119,7 @@ function nowInvoiceNumber() {
 
 module.exports = {
   PAYMENT_STATUS,
+  applyFactoryDeductionPresets,
   calculateBon,
   nextDay,
   nowInvoiceNumber,

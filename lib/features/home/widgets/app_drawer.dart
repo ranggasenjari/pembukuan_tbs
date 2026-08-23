@@ -9,6 +9,7 @@ import '../../expenses/expense_list_screen.dart';
 import '../../relation_agents/relation_agent_list_screen.dart';
 import '../../payment_relations/payment_relation_list_screen.dart';
 import '../../factories/factory_list_screen.dart';
+import '../../vehicles/vehicle_list_screen.dart';
 import '../../saldo/saldo_list_screen.dart';
 import '../../settings/settings_screen.dart';
 
@@ -60,6 +61,12 @@ class AppDrawer extends StatelessWidget {
                   icon: Icons.factory_outlined,
                   title: 'Pabrik',
                   onTap: () => _navigateTo(context, const FactoryListScreen()),
+                ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.local_shipping_outlined,
+                  title: 'Kendaraan',
+                  onTap: () => _navigateTo(context, const VehicleListScreen()),
                 ),
                 _buildDrawerItem(
                   context,

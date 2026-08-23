@@ -50,26 +50,32 @@ function measureRowHeight(doc, cells, columns) {
 function drawTableHeader(doc, columns, tableWidth) {
   const x = A4_MARGIN;
   const y = doc.y;
-  const height = 24;
+  const height = 26;
   const tw = tableWidth || A4_TABLE_WIDTH;
 
   doc.save();
-  doc.rect(x, y, tw, height).fill('#1f2937');
-  doc.rect(x, y, tw, height).stroke('#d8dee6');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7.4);
+  doc.rect(x, y, tw, height).fill('#1e293b');
+  doc.fillColor('#f8fafc').font('Helvetica-Bold').fontSize(8);
 
   let cursor = x;
   columns.forEach((column) => {
-    drawCellText(doc, column.label, cursor + 5, y + 7, column.width - 10, {
+    drawCellText(doc, column.label, cursor + 5, y + 8.5, column.width - 10, {
       align: column.align || 'left'
     });
     cursor += column.width;
+  });
+
+  doc.strokeColor('#334155').lineWidth(0.6);
+  cursor = x;
+  columns.slice(0, -1).forEach((column) => {
+    cursor += column.width;
+    doc.moveTo(cursor, y).lineTo(cursor, y + height).stroke();
   });
   doc.restore();
   doc.y = y + height;
 }
 
-function drawTableRow(doc, columns, cells, index, tableWidth) {
+function drawTableRow(doc, columns, cells, index, tableWidth, options = {}) {
   const rowHeight = measureRowHeight(doc, cells, columns);
   const tw = tableWidth || A4_TABLE_WIDTH;
   ensureSpace(doc, rowHeight + 8, () => drawTableHeader(doc, columns, tw));
@@ -77,20 +83,26 @@ function drawTableRow(doc, columns, cells, index, tableWidth) {
   const x = A4_MARGIN;
   const y = doc.y;
   doc.save();
-  if (index % 2 === 1) {
-    doc.rect(x, y, tw, rowHeight).fill('#fbfcfd');
-  }
-  doc.rect(x, y, tw, rowHeight).stroke('#e4e7ec');
-  doc.fillColor('#1f2937').font('Helvetica').fontSize(8.2);
+  const baseFill = index % 2 === 1 ? '#f8fafc' : '#ffffff';
+  doc.rect(x, y, tw, rowHeight).fill(options.fill || baseFill);
+  doc.fillColor(options.textColor || '#1f2937').font('Helvetica').fontSize(8.2);
 
   let cursor = x;
   cells.forEach((cell, cellIndex) => {
     const column = columns[cellIndex];
-    drawCellText(doc, cell, cursor + 5, y + 7, column.width - 10, {
+    drawCellText(doc, cell, cursor + 5, y + 7.5, column.width - 10, {
       align: column.align || 'left'
     });
     cursor += column.width;
   });
+
+  doc.strokeColor('#e2e8f0').lineWidth(0.5);
+  cursor = x;
+  columns.slice(0, -1).forEach((column) => {
+    cursor += column.width;
+    doc.moveTo(cursor, y).lineTo(cursor, y + rowHeight).stroke();
+  });
+  doc.rect(x, y, tw, rowHeight).stroke('#cbd5e1');
   doc.restore();
   doc.y = y + rowHeight;
 }
@@ -533,15 +545,28 @@ async function generateThermalNotaPdf(nota, bon) {
 }
 
 async function generateHarianPdf(bons, summary, filters, factories) {
-  const doc = new PDFDocument({ size: 'A4', margin: A4_MARGIN });
-  const pageBottom = A4_BOTTOM;
-  const pageWidth = A4_TABLE_WIDTH + A4_MARGIN * 2;
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: A4_MARGIN });
+  const pageBottom = doc.page.height - A4_MARGIN;
   const margin = A4_MARGIN;
-  const bodyWidth = A4_TABLE_WIDTH;
+  const bodyWidth = doc.page.width - 2 * A4_MARGIN;
   const blue = '#1e3a5f';
-  const accent = '#2563eb';
   const gray = '#475569';
   const lightBg = '#f8fafc';
+
+  const spsiOf = (bon) => Number(bon.spsi_amount || (Number(bon.biaya_bongkar || 0) * Number(bon.netto_1 || 0)));
+  const subtotalOf = (bon) => Number(bon.netto_2 || 0) * Number(bon.price || 0);
+  const potLainOf = (bon) => (bon.bon_deductions || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+  const totalOf = (bon) => subtotalOf(bon) - (spsiOf(bon) + Number(bon.pph || 0) + Number(bon.uang_minum || 0) + Number(bon.bp_colt || 0) + Number(bon.dp || 0) + potLainOf(bon));
+
+  // Potongan tetap: SPSI, PPh, Uang Minum.
+  const potonganTetapCell = (bon) => {
+    const rows = [];
+    if (spsiOf(bon)) rows.push(`SPSI ${number(spsiOf(bon))}`);
+    if (Number(bon.pph || 0)) rows.push(`PPh ${number(bon.pph)}`);
+    if (Number(bon.uang_minum || 0)) rows.push(`UM ${number(bon.uang_minum)}`);
+    if (!rows.length) return number(0);
+    return rows.join('\n');
+  };
 
   // ── Header bar ──
   doc.rect(margin, 20, bodyWidth, 48).fill(blue);
@@ -562,13 +587,20 @@ async function generateHarianPdf(bons, summary, filters, factories) {
 
   // ── Table ──
   const columns = [
-    { label: '#', width: 24, align: 'center' },
-    { label: 'Tanggal', width: 70 },
-    { label: 'Plat', width: 78 },
-    { label: 'Netto', width: 70, align: 'right' },
-    { label: 'Kumulatif', width: 75, align: 'right' },
-    { label: 'Harga', width: 85, align: 'right' },
-    { label: 'Total', width: 121, align: 'right' }
+    { label: '#', width: 22, align: 'center' },
+    { label: 'Tanggal', width: 56 },
+    { label: 'Plat', width: 50 },
+    { label: 'Relasi', width: 68 },
+    { label: 'Netto', width: 52, align: 'right' },
+    { label: 'Kumulatif', width: 52, align: 'right' },
+    { label: 'Harga', width: 58, align: 'right' },
+    { label: 'Subtotal', width: 68, align: 'right' },
+    { label: 'Potongan', width: 72, align: 'right' },
+    { label: 'BP', width: 48, align: 'right' },
+    { label: 'DP', width: 42, align: 'right' },
+    { label: 'Pot. Lain', width: 48, align: 'right' },
+    { label: 'Total', width: 68, align: 'right' },
+    { label: 'Relasi Bayar', width: 66 }
   ];
   const tableWidth = columns.reduce((s, c) => s + c.width, 0);
 
@@ -580,8 +612,10 @@ async function generateHarianPdf(bons, summary, filters, factories) {
   let totalNetto = 0;
   let totalAmount = 0;
   let pageNum = 1;
+  let rowNo = 1;
 
   bons.forEach((bon, index) => {
+    const subs = Array.isArray(bon.sub_notas) ? bon.sub_notas : [];
     if (doc.y + 28 > pageBottom) {
       // Footer with page number
       doc.fillColor('#94a3b8').font('Helvetica').fontSize(7).text(`Hal. ${pageNum}`, margin, pageBottom - 10, { width: bodyWidth, align: 'center' });
@@ -593,34 +627,77 @@ async function generateHarianPdf(bons, summary, filters, factories) {
     const netto = Number(bon.netto_2 || 0);
     cumulative += netto;
     totalNetto += netto;
-    totalAmount += Number(bon.total || 0);
+    totalAmount += totalOf(bon);
 
     drawTableRow(doc, columns, [
-      String(index + 1),
+      String(rowNo),
       date(bon.bon_date),
       bon.plate_number || '-',
+      bon.relation_agents?.name || bon.relation_name || '-',
       `${number(netto)} kg`,
       `${number(cumulative)} kg`,
       currency(bon.price),
-      currency(bon.total)
+      currency(subtotalOf(bon)),
+      potonganTetapCell(bon),
+      number(Number(bon.bp_colt || 0)),
+      number(Number(bon.dp || 0)),
+      number(potLainOf(bon)),
+      currency(totalOf(bon)),
+      bon.payment_relation_name || '-'
     ], index, tableWidth);
+    rowNo++;
+
+    subs.forEach((sub) => {
+      if (doc.y + 28 > pageBottom) {
+        doc.fillColor('#94a3b8').font('Helvetica').fontSize(7).text(`Hal. ${pageNum}`, margin, pageBottom - 10, { width: bodyWidth, align: 'center' });
+        pageNum++;
+        doc.addPage();
+        drawTableHeader(doc, columns, tableWidth);
+      }
+      totalAmount += Number(sub.amount || 0);
+      drawTableRow(doc, columns, [
+        String(rowNo),
+        '',
+        '',
+        sub.name || '-',
+        `${number(sub.netto_2)} kg`,
+        '',
+        currency(sub.price_per_kg),
+        currency(Number(sub.netto_2 || 0) * Number(sub.price_per_kg || 0)),
+        number(0),
+        '',
+        '',
+        '',
+        currency(sub.amount),
+        ''
+      ], index, tableWidth, { fill: '#f1f5f9', textColor: '#475569' });
+      rowNo++;
+    });
   });
 
   // ── Total row ──
   const totalRowY = doc.y + 10;
-  let cX = margin;
-  const nettoCol = columns[3], kumCol = columns[4], totalCol = columns[6];
-  const nettoStart = columns.slice(0, 3).reduce((s, c) => s + c.width, 0);
-  const kumStart = columns.slice(0, 4).reduce((s, c) => s + c.width, 0);
-  const totalStart = columns.slice(0, 6).reduce((s, c) => s + c.width, 0);
+  const byLabel = (label) => columns.find((c) => c.label === label);
+  const colStart = (label) => columns.slice(0, columns.findIndex((c) => c.label === label)).reduce((s, c) => s + c.width, 0);
+
+  const totalPotongan = bons.reduce((sum, b) => sum + spsiOf(b) + Number(b.pph || 0) + Number(b.uang_minum || 0), 0);
+  const totalSubtotal = bons.reduce((sum, b) => sum + subtotalOf(b), 0);
+  const totalBp = bons.reduce((sum, b) => sum + Number(b.bp_colt || 0), 0);
+  const totalDp = bons.reduce((sum, b) => sum + Number(b.dp || 0), 0);
+  const totalPotLain = bons.reduce((sum, b) => sum + potLainOf(b), 0);
 
   doc.rect(margin, totalRowY, tableWidth, 32).fill(blue);
   doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10);
   doc.text('TOTAL', margin + 10, totalRowY + 8, { width: 120 });
-  doc.font('Helvetica-Bold').fontSize(9);
-  doc.text(`${number(totalNetto)} kg`, margin + nettoStart + 5, totalRowY + 8, { width: nettoCol.width - 10, align: 'right' });
-  doc.text(`${number(cumulative)} kg`, margin + kumStart + 5, totalRowY + 8, { width: kumCol.width - 10, align: 'right' });
-  doc.text(currency(totalAmount), margin + totalStart + 5, totalRowY + 8, { width: totalCol.width - 10, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(8);
+  doc.text(`${number(totalNetto)} kg`, margin + colStart('Netto') + 5, totalRowY + 9, { width: byLabel('Netto').width - 10, align: 'right' });
+  doc.text(`${number(cumulative)} kg`, margin + colStart('Kumulatif') + 5, totalRowY + 9, { width: byLabel('Kumulatif').width - 10, align: 'right' });
+  doc.text(number(totalPotongan), margin + colStart('Potongan') + 5, totalRowY + 9, { width: byLabel('Potongan').width - 10, align: 'right' });
+  doc.text(currency(totalSubtotal), margin + colStart('Subtotal') + 5, totalRowY + 9, { width: byLabel('Subtotal').width - 10, align: 'right' });
+  doc.text(number(totalBp), margin + colStart('BP') + 5, totalRowY + 9, { width: byLabel('BP').width - 10, align: 'right' });
+  doc.text(number(totalDp), margin + colStart('DP') + 5, totalRowY + 9, { width: byLabel('DP').width - 10, align: 'right' });
+  doc.text(number(totalPotLain), margin + colStart('Pot. Lain') + 5, totalRowY + 9, { width: byLabel('Pot. Lain').width - 10, align: 'right' });
+  doc.text(currency(totalAmount), margin + colStart('Total') + 5, totalRowY + 9, { width: byLabel('Total').width - 10, align: 'right' });
 
   // ── Footer ──
   doc.fillColor('#94a3b8').font('Helvetica').fontSize(7).text(`Hal. ${pageNum}`, margin, pageBottom - 10, { width: bodyWidth, align: 'center' });
@@ -636,16 +713,16 @@ async function generateLedgerPdf(bons, summary, filters, factories) {
 
   const colW = (doc.page.width - 2 * A4_MARGIN);
   const columns = [
-    { label: 'Tanggal', width: 75 },
-    { label: 'Plat', width: 65 },
-    { label: 'Agen/Driver', width: 120 },
-    { label: 'Pabrik', width: 110 },
-    { label: 'Netto', width: 70, align: 'right' },
-    { label: 's/d', width: 75, align: 'right' },
-    { label: 'Harga', width: 85, align: 'right' },
-    { label: 'Total', width: 95, align: 'right' },
-    { label: 'Nota', width: 35, align: 'center' },
-    { label: 'Bayar', width: 35, align: 'center' }
+    { label: 'Tanggal', width: 70 },
+    { label: 'Pabrik', width: 96 },
+    { label: 'Plat', width: 58 },
+    { label: 'Agen/Driver', width: 112 },
+    { label: 'Netto', width: 62, align: 'right' },
+    { label: 's/d', width: 62, align: 'right' },
+    { label: 'Harga', width: 76, align: 'right' },
+    { label: 'Total', width: 90, align: 'right' },
+    { label: 'Nota', width: 47, align: 'center' },
+    { label: 'Bayar', width: 47, align: 'center' }
   ];
 
   const titleY = 30;
@@ -664,9 +741,10 @@ async function generateLedgerPdf(bons, summary, filters, factories) {
   let totalAmount = 0;
 
   bons.forEach((bon, index) => {
+    const subs = Array.isArray(bon.sub_notas) ? bon.sub_notas : [];
     if (doc.y + 30 > pageBottom) {
       doc.addPage();
-      drawTableHeader(doc, columns);
+      drawTableHeader(doc, columns, tableWidth);
     }
 
     const netto = Number(bon.netto_2 || 0);
@@ -676,13 +754,14 @@ async function generateLedgerPdf(bons, summary, filters, factories) {
 
     const hasNota = bon.nota_items && bon.nota_items.length > 0;
     const hasPayment = hasNota && bon.nota_items[0].notas?.payments?.length > 0;
-    const driverLabel = [bon.driver_name, bon.relation_agents?.name].filter(Boolean).join(' / ') || '-';
+    const driver = bon.driver_name ? String(bon.driver_name) : '';
+    const platCell = driver ? `${bon.plate_number || '-'}\n${driver}` : (bon.plate_number || '-');
 
     drawTableRow(doc, columns, [
       date(bon.bon_date),
-      bon.plate_number || '-',
-      driverLabel,
       bon.factories?.name || '-',
+      platCell,
+      bon.relation_agents?.name || '-',
       `${number(netto)} kg`,
       `${number(cumulative)} kg`,
       currency(bon.price),
@@ -690,18 +769,49 @@ async function generateLedgerPdf(bons, summary, filters, factories) {
       hasNota ? 'V' : '-',
       hasPayment ? 'V' : '-'
     ], index, tableWidth);
+
+    subs.forEach((sub) => {
+      if (doc.y + 30 > pageBottom) {
+        doc.addPage();
+        drawTableHeader(doc, columns);
+      }
+      totalAmount += Number(sub.amount || 0);
+      drawTableRow(doc, columns, [
+        '',
+        '',
+        '',
+        sub.name || '-',
+        `${number(sub.netto_2)} kg`,
+        '',
+        currency(sub.price_per_kg),
+        currency(sub.amount),
+        '',
+        ''
+      ], index, tableWidth, { fill: '#f1f5f9', textColor: '#475569' });
+    });
   });
 
-  const totalRowY = doc.y + 12;
-  doc.fillColor('#000000').font('Helvetica-Bold').fontSize(10);
-  doc.text('TOTAL', A4_MARGIN, totalRowY, { width: columns.slice(0, 4).reduce((s, c) => s + c.width, 0) });
-  doc.fillColor('#1f2937').font('Helvetica-Bold').fontSize(9);
-  const nettoColEnd = columns.slice(0, 5).reduce((s, c) => s + c.width, 0);
-  const sdColEnd = columns.slice(0, 6).reduce((s, c) => s + c.width, 0);
-  const totalColEnd = columns.slice(0, 8).reduce((s, c) => s + c.width, 0);
-  doc.text(`${number(totalNetto)} kg`, A4_MARGIN + nettoColEnd - 70, totalRowY, { width: 70, align: 'right' });
-  doc.text(`${number(cumulative)} kg`, A4_MARGIN + sdColEnd - 75, totalRowY, { width: 75, align: 'right' });
-  doc.text(currency(totalAmount), A4_MARGIN + totalColEnd - 95, totalRowY, { width: 95, align: 'right' });
+  const totalRowY = doc.y + 10;
+  const tw = tableWidth;
+  doc.save();
+  doc.rect(A4_MARGIN, totalRowY, tw, 22).fill('#f1f5f9');
+  doc.strokeColor('#cbd5e1').lineWidth(0.6);
+  doc.rect(A4_MARGIN, totalRowY, tw, 22).stroke();
+  doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(9);
+  doc.text('TOTAL', A4_MARGIN + 5, totalRowY + 6, { width: columns.slice(0, 4).reduce((s, c) => s + c.width, 0) - 5 });
+
+  const colStart = (colIndex) => columns.slice(0, colIndex).reduce((s, c) => s + c.width, 0);
+  const alignIn = (colIndex, value) => {
+    const col = columns[colIndex];
+    doc.text(value, A4_MARGIN + colStart(colIndex) + 5, totalRowY + 6, {
+      width: col.width - 10,
+      align: col.align || 'left'
+    });
+  };
+  alignIn(4, `${number(totalNetto)} kg`);
+  alignIn(5, `${number(cumulative)} kg`);
+  alignIn(7, currency(totalAmount));
+  doc.restore();
 
   return collectPdf(doc);
 }

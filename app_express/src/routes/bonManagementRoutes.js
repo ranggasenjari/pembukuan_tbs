@@ -8,19 +8,15 @@ const notaRepository = require('../repositories/notaRepository');
 const paymentRelationRepository = require('../repositories/paymentRelationRepository');
 const relationAgentRepository = require('../repositories/relationAgentRepository');
 const paymentRepository = require('../repositories/paymentRepository');
+const subNotaRepository = require('../repositories/subNotaRepository');
 const vehicleRepository = require('../repositories/vehicleRepository');
-const { calculateBon, parseDeductions } = require('../services/calculations');
+const { calculateBon } = require('../services/calculations');
+const { applyManagedBonUpdate } = require('../services/managedBonUpdate');
 const { buildNotaWhatsappMessage } = require('../services/notaWhatsapp');
 const { todayInput } = require('../services/request');
 const { uploadPublicFile } = require('../services/uploadService');
 
 const router = express.Router();
-
-function cleanBody(body) {
-  return Object.fromEntries(
-    Object.entries(body || {}).filter(([, value]) => value !== '' && value !== undefined)
-  );
-}
 
 async function ensureVehicleForBon(supabase, bon) {
   const plate = bonManagementRepository.normalizePlate(bon.plate_number);
@@ -54,7 +50,7 @@ async function recalculateBonAndNotas(supabase, bonId) {
     }
   }
 
-  const calculated = calculateBon({ ...body, pph: undefined, uang_minum: undefined, deductions });
+  const calculated = calculateBon({ ...body, deductions });
   const data = bonRepository.serializeBon(body, calculated, bon.image_url);
   await bonRepository.updateBon(supabase, bonId, data, deductions, true);
 
@@ -97,72 +93,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.patch('/bons/:id', asyncHandler(async (req, res) => {
-  const current = await bonRepository.getBon(req.supabase, req.params.id);
-  const body = { ...current, ...cleanBody(req.body), status: current.status };
-
-  // Relasi Agen: pilih existing atau buat baru (hanya nama + alamat)
-  const relationChanged =
-    req.body.relation_agent_id !== undefined || req.body.new_relation_name !== undefined;
-  if (relationChanged) {
-    const newRelName = req.body.new_relation_name ? String(req.body.new_relation_name).trim() : '';
-    const relationAgentId = req.body.relation_agent_id || null;
-    if (newRelName) {
-      // Buat relasi baru — prioritas di atas pilihan dropdown
-      const created = await relationAgentRepository.createRelationAgent(req.supabase, {
-        name: newRelName,
-        address: req.body.new_relation_address || null
-      });
-      body.relation_agent_id = created.id;
-      body.relation_name = created.name;
-    } else if (relationAgentId) {
-      const agent = await relationAgentRepository.getRelationAgent(req.supabase, relationAgentId);
-      body.relation_agent_id = agent.id;
-      body.relation_name = agent.name;
-    } else {
-      body.relation_agent_id = null;
-    }
-  }
-
-  if (body.factory_spsi_type_id && body.factory_id) {
-    const factory = await factoryRepository.getFactory(req.supabase, body.factory_id);
-    const type = (factory.factory_spsi_types || []).find((item) => item.id === body.factory_spsi_type_id);
-    if (type) {
-      body.spsi_type_name = type.name;
-      body.spsi_calculation_mode = type.calculation_mode;
-      body.spsi_rate = type.amount;
-      body.biaya_bongkar = type.amount;
-    }
-  }
-
-  // PPh toggle: '1'/'true' → auto hitung 0.25%; '0'/'false' → 0
-  if (req.body.pph_enabled !== undefined) {
-    const enabled = req.body.pph_enabled === '1' || req.body.pph_enabled === 'true' || req.body.pph_enabled === true;
-    if (enabled) body.pph = undefined;
-    else body.pph = 0;
-  }
-
-  // Deductions dari form (potongan lain)
-  const deductions = parseDeductions(req.body);
-  const calculated = calculateBon({ ...body, deductions });
-  const data = bonRepository.serializeBon(body, calculated, current.image_url);
-  await bonRepository.updateBon(req.supabase, req.params.id, data, deductions, true);
-
-  // Jika relasi bon berubah, sinkronkan relasi nota yang menampung bon ini
-  if (relationChanged && current.relation_agent_id !== body.relation_agent_id) {
-    const related = await bonRepository.getRelatedRecords(req.supabase, req.params.id);
-    for (const nota of related.notas) {
-      await req.supabase
-        .from('notas')
-        .update({
-          relation_agent_id: body.relation_agent_id || null,
-          recipient_name: body.relation_agent_id ? null : (body.relation_name || null),
-          recipient_address: body.fruit_origin || null
-        })
-        .eq('id', nota.id);
-    }
-  }
-
-  const updated = await bonRepository.getBon(req.supabase, req.params.id);
+  const updated = await applyManagedBonUpdate(req.supabase, req.params.id, req.body);
   res.json({ ok: true, bon: updated });
 }));
 
@@ -205,6 +136,26 @@ router.post('/bons/:id/nota', asyncHandler(async (req, res) => {
     recipient_address: bon.fruit_origin || null
   }, [bon.id]);
   req.flash('success', `Nota ${nota.invoice_number} berhasil dibuat.`);
+  res.redirect('/bon-management');
+}));
+
+// Sub Nota
+router.post('/bons/:id/sub-nota', asyncHandler(async (req, res) => {
+  const subNota = await subNotaRepository.createForBon(req.supabase, req.params.id, req.body);
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    return res.status(201).json({ ok: true, subNota });
+  }
+  req.flash('success', `Sub nota ${subNota.name} berhasil ditambahkan.`);
+  res.redirect('/bon-management');
+}));
+
+router.delete('/bons/:id/sub-notas/:sid', asyncHandler(async (req, res) => {
+  const existing = await subNotaRepository.getSubNota(req.supabase, req.params.sid);
+  await subNotaRepository.deleteSubNota(req.supabase, req.params.sid);
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    return res.json({ ok: true });
+  }
+  req.flash('success', `Sub nota ${existing.name} berhasil dihapus.`);
   res.redirect('/bon-management');
 }));
 

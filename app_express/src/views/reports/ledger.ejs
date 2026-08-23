@@ -44,9 +44,9 @@
       <thead>
         <tr>
           <th>Tanggal</th>
+          <th>Pabrik</th>
           <th>Plat</th>
           <th>Agen/Driver</th>
-          <th>Pabrik</th>
           <th>Netto</th>
           <th>s/d</th>
           <th>Harga</th>
@@ -57,19 +57,28 @@
       </thead>
       <tbody>
         <% let cumulative = 0; %>
+        <% let grandTotal = 0; %>
         <% ledger.inProgress.forEach((bon) => { %>
+          <% const subs = bon.sub_notas || []; %>
+          <% const subTotal = subs.reduce((s, n) => s + Number(n.amount || 0), 0); %>
           <% cumulative += Number(bon.netto_2 || 0); %>
+          <% grandTotal += Number(bon.total || 0) + subTotal; %>
           <% const hasNota = bon.nota_items && bon.nota_items.length > 0; %>
           <% const hasPayment = hasNota && bon.nota_items[0].notas?.payments?.length > 0; %>
           <tr>
             <td><%= format.date(bon.bon_date) %></td>
-            <td><%= bon.plate_number %></td>
-            <td><%= bon.driver_name || '-' %><%= bon.relation_agents?.name ? ` / ${bon.relation_agents.name}` : '' %></td>
             <td><%= bon.factories?.name || '-' %></td>
+            <td>
+              <%= bon.plate_number %>
+              <% if (bon.driver_name) { %>
+                <div class="sub-driver"><%= bon.driver_name %></div>
+              <% } %>
+            </td>
+            <td><%= bon.relation_agents?.name || '-' %></td>
             <td class="text-right"><%= format.number(bon.netto_2) %> kg</td>
             <td class="text-right font-bold"><%= format.number(cumulative) %> kg</td>
-            <td><%= format.currency(bon.price) %></td>
-            <td><%= format.currency(bon.total) %></td>
+            <td class="text-right"><%= format.currency(bon.price) %></td>
+            <td class="text-right"><%= format.currency(bon.total) %></td>
             <td class="text-center">
               <% if (hasNota) { %>
                 <span class="print-text">TERBIT</span>
@@ -89,7 +98,24 @@
               <% } %>
             </td>
           </tr>
+          <% subs.forEach((sub) => { %>
+            <tr class="subnota-row">
+              <td colspan="3"></td>
+              <td><%= sub.name %></td>
+              <td class="text-right"><%= format.number(sub.netto_2) %> kg</td>
+              <td></td>
+              <td class="text-right"><%= format.currency(sub.price_per_kg) %></td>
+              <td class="text-right"><%= format.currency(sub.amount) %></td>
+              <td></td>
+              <td></td>
+            </tr>
+          <% }) %>
         <% }) %>
+        <tr class="subnota-total-row">
+          <td colspan="7" class="text-right font-bold">TOTAL (termasuk sub nota)</td>
+          <td class="text-right font-bold"><%= format.currency(grandTotal) %></td>
+          <td colspan="2"></td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -103,6 +129,11 @@
     .print-text { display: none; }
     .print-icon { display: inline; }
   }
+  .subnota-row { background: #f8fafc; color: #475569; font-size: .95em; }
+  .subnota-row td { border-top: 1px dashed #e2e8f0; }
+  .subnota-total-row { background: #eef2ff; font-weight: 800; }
+  .sub-driver { font-size: .85em; color: #94a3b8; margin-top: 1px; }
+  .table-card td.text-right { white-space: nowrap; }
 </style>
 <script src="<%= url('/js/ledger.js') %>"></script>
 <%- include('../partials/footer') %>

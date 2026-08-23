@@ -28,21 +28,31 @@ class OcrService {
     required Uint8List bytes,
     required String fileName,
     required OcrSettingsModel settings,
+    String? factoryName,
+    OcrFactorySettings? factorySettings,
   }) {
     if (settings.mode == OcrMode.internal) {
       return _processInternal(
         bytes: bytes,
         fileName: fileName,
         settings: settings,
+        factoryName: factoryName,
+        factorySettings: factorySettings,
       );
     }
-    return _processWebhook(bytes: bytes, fileName: fileName, settings: settings);
+    return _processWebhook(
+      bytes: bytes,
+      fileName: fileName,
+      settings: settings,
+      factoryName: factoryName,
+    );
   }
 
   Future<OcrResult> _processWebhook({
     required Uint8List bytes,
     required String fileName,
     required OcrSettingsModel settings,
+    String? factoryName,
   }) async {
     final request = http.MultipartRequest('POST', Uri.parse(settings.webhookUrl))
       ..files.add(
@@ -64,9 +74,12 @@ class OcrService {
     }
 
     final payload = json.decode(body);
-    final data = _unwrapPayload(payload);
+    final data = normalizeOcrData(_unwrapPayload(payload));
+    if (factoryName != null && factoryName.trim().isNotEmpty) {
+      data['factory_name'] = factoryName.trim();
+    }
     return OcrResult(
-      data: normalizeOcrData(data),
+      data: data,
       imagePath: data['path']?.toString(),
     );
   }
@@ -75,15 +88,25 @@ class OcrService {
     required Uint8List bytes,
     required String fileName,
     required OcrSettingsModel settings,
+    String? factoryName,
+    OcrFactorySettings? factorySettings,
   }) async {
     if (settings.mistralApiKey.isEmpty) {
       throw Exception('Mistral API Key wajib diisi di Setting OCR.');
     }
-    if (settings.mistralPrompt.isEmpty) {
+
+    final prompt = (factorySettings?.prompt?.trim().isNotEmpty ?? false)
+        ? factorySettings!.prompt!.trim()
+        : settings.mistralPrompt;
+    final schemaSource = (factorySettings?.outputSchema?.trim().isNotEmpty ??
+            false)
+        ? factorySettings!.outputSchema!
+        : settings.mistralOutputSchema;
+    if (prompt.isEmpty) {
       throw Exception('Prompt Mistral wajib diisi di Setting OCR.');
     }
 
-    final schema = json.decode(settings.mistralOutputSchema);
+    final schema = json.decode(schemaSource);
     final body = {
       'model': 'mistral-ocr-latest',
       'document': {
@@ -93,7 +116,7 @@ class OcrService {
               'data:${_mimeTypeFor(fileName)};base64,${base64Encode(bytes)}',
         },
       },
-      'document_annotation_prompt': settings.mistralPrompt,
+      'document_annotation_prompt': prompt,
       'document_annotation_format': schema,
     };
 
@@ -114,6 +137,9 @@ class OcrService {
 
     final payload = json.decode(response.body);
     final data = normalizeOcrData(Map<String, dynamic>.from(payload));
+    if (factoryName != null && factoryName.trim().isNotEmpty) {
+      data['factory_name'] = factoryName.trim();
+    }
     final upload = await uploadBonImage(bytes: bytes, fileName: fileName);
     return OcrResult(data: data, imagePath: upload.$1, imageUrl: upload.$2);
   }

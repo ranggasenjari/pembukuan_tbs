@@ -52,8 +52,93 @@
     </div>
   </section>
 
+  <section class="form-card">
+    <div class="flex items-center justify-between">
+      <h2>Prompt & Schema Custom per Pabrik</h2>
+    </div>
+    <p class="text-sm text-slate-500 mb-4">Bila bon dari pabrik tertentu punya format berbeda, atur prompt dan schema khusus di sini. Saat OCR, bon akan diproses sesuai pengaturan pabrik yang dipilih (opsional).</p>
+
+    <div class="mb-4 flex flex-wrap items-end gap-3">
+      <label class="min-w-64">
+        <span class="form-label">Pilih Pabrik</span>
+        <select id="factory-picker" class="form-input">
+          <option value="">Pilih Pabrik</option>
+          <% (factories || []).forEach((factory) => { %>
+            <option value="<%= factory.id %>" data-name="<%= factory.name %>"><%= factory.name %></option>
+          <% }) %>
+        </select>
+      </label>
+      <button type="button" id="add-factory-setting" class="btn-secondary">Tambah Pabrik</button>
+    </div>
+
+    <div id="factory-settings-list" class="space-y-4">
+      <% const fsMap = ocrSettings.factory_settings || {}; %>
+      <% Object.entries(fsMap).forEach(([factoryId, setting]) => { %>
+      <div class="factory-setting rounded-lg border border-slate-200 p-4" data-factory-id="<%= factoryId %>">
+        <div class="flex items-center justify-between mb-3">
+          <strong class="factory-name"><%= setting.factory_name || factoryId %></strong>
+          <button type="button" class="remove-factory-setting rounded-lg bg-rose-50 px-3 py-1 text-rose-700">Hapus</button>
+        </div>
+        <input type="hidden" name="factory_settings[<%= factoryId %>][factory_id]" value="<%= factoryId %>">
+        <input type="hidden" name="factory_settings[<%= factoryId %>][factory_name]" value="<%= setting.factory_name || '' %>">
+        <label class="mt-2 block">
+          <span class="form-label">Prompt (Pabrik)</span>
+          <textarea name="factory_settings[<%= factoryId %>][prompt]" rows="4" class="form-input"><%= setting.prompt || '' %></textarea>
+        </label>
+        <label class="mt-2 block">
+          <span class="form-label">Output JSON Schema (Pabrik)</span>
+          <textarea name="factory_settings[<%= factoryId %>][output_schema]" rows="8" class="form-input font-mono text-sm"><%= setting.output_schema || '' %></textarea>
+        </label>
+      </div>
+      <% }) %>
+    </div>
+  </section>
+
   <div class="flex flex-wrap gap-3">
     <button class="btn-primary">Simpan Setting</button>
   </div>
 </form>
+<script>
+  window.FACTORIES = <%- JSON.stringify(factories || []) %>;
+  const factorySettingsList = document.getElementById('factory-settings-list');
+  const factoryPicker = document.getElementById('factory-picker');
+
+  document.getElementById('add-factory-setting')?.addEventListener('click', () => {
+    const selectedId = factoryPicker?.value;
+    if (!selectedId) { alert('Pilih pabrik terlebih dahulu.'); return; }
+    if (factorySettingsList.querySelector(`[data-factory-id="${selectedId}"]`)) {
+      alert('Pabrik ini sudah ditambahkan.');
+      return;
+    }
+    const option = factoryPicker.selectedOptions?.[0];
+    const name = option?.dataset.name || selectedId;
+    const div = document.createElement('div');
+    div.className = 'factory-setting rounded-lg border border-slate-200 p-4';
+    div.dataset.factoryId = selectedId;
+    div.innerHTML = `
+      <div class="flex items-center justify-between mb-3">
+        <strong class="factory-name"></strong>
+        <button type="button" class="remove-factory-setting rounded-lg bg-rose-50 px-3 py-1 text-rose-700">Hapus</button>
+      </div>
+      <input type="hidden" name="factory_settings[${selectedId}][factory_id]" value="${selectedId}">
+      <input type="hidden" name="factory_settings[${selectedId}][factory_name]" value="${name}">
+      <label class="mt-2 block">
+        <span class="form-label">Prompt (Pabrik)</span>
+        <textarea name="factory_settings[${selectedId}][prompt]" rows="4" class="form-input"></textarea>
+      </label>
+      <label class="mt-2 block">
+        <span class="form-label">Output JSON Schema (Pabrik)</span>
+        <textarea name="factory_settings[${selectedId}][output_schema]" rows="8" class="form-input font-mono text-sm"></textarea>
+      </label>
+    `;
+    div.querySelector('.factory-name').textContent = name;
+    factorySettingsList.appendChild(div);
+  });
+
+  factorySettingsList?.addEventListener('click', (event) => {
+    if (event.target.classList.contains('remove-factory-setting')) {
+      event.target.closest('.factory-setting')?.remove();
+    }
+  });
+</script>
 <%- include('../partials/footer') %>

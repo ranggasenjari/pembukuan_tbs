@@ -46,6 +46,26 @@ async function listManagedBons(supabase, filters = {}) {
     });
   }
 
+  // Sub nota diambil terpisah & defensif: bila tabel belum migrasi,
+  // halaman Manajemen Bon tetap berjalan (sub nota kosong).
+  const subNotasByBon = {};
+  try {
+    const ids = bons.map((bon) => bon.id);
+    if (ids.length) {
+      const rows = assertNoError(
+        await supabase.from('sub_notas').select('*').in('bon_id', ids)
+      );
+      rows.forEach((row) => {
+        (subNotasByBon[row.bon_id] = subNotasByBon[row.bon_id] || []).push(row);
+      });
+      Object.values(subNotasByBon).forEach((list) =>
+        list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      );
+    }
+  } catch (error) {
+    console.error('Sub nota query error (table mungkin belum migrasi):', error.message);
+  }
+
   const items = bons.map((bon) => {
     const nota = bon.nota_items?.[0]?.notas || null;
     const payments = nota?.payments || [];
@@ -53,7 +73,8 @@ async function listManagedBons(supabase, filters = {}) {
       bon,
       paymentRelation: relationByPlate[normalizePlate(bon.plate_number)] || null,
       nota,
-      payments
+      payments,
+      subNotas: subNotasByBon[bon.id] || []
     };
   });
 

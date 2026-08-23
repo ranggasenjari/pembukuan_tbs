@@ -6,10 +6,7 @@ import '../../providers/providers.dart';
 import '../../repositories/dashboard_repository.dart';
 import '../auth/login_screen.dart';
 import '../bons/bon_list_screen.dart';
-import '../notas/nota_list_screen.dart';
 import '../payments/payment_list_screen.dart';
-import '../expenses/expense_list_screen.dart';
-import '../saldo/saldo_list_screen.dart';
 import '../margins/margin_list_screen.dart';
 import 'widgets/app_drawer.dart';
 
@@ -21,10 +18,20 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  DateTimeRange _dateRange = DateTimeRange(
-    start: DateTime(DateTime.now().year, DateTime.now().month, 1),
-    end: DateTime.now(),
-  );
+  static DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTimeRange _dateRange =
+      DateTimeRange(start: _today(), end: _today());
+
+  bool get _isTodayPreset =>
+      _dateRange.start == _today() && _dateRange.end == _today();
+
+  bool get _isMonthPreset => _dateRange.start ==
+          DateTime(DateTime.now().year, DateTime.now().month, 1) &&
+      _dateRange.end == _today();
 
   @override
   Widget build(BuildContext context) {
@@ -95,11 +102,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildDateFilterPill(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                _buildPresetButtons(),
+                const SizedBox(height: 16),
                 GestureDetector(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const SaldoListScreen()),
+                    MaterialPageRoute(builder: (_) => const BonListScreen()),
                   ),
                   child: _buildHeroCard(stats),
                 ),
@@ -118,7 +127,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 const SizedBox(height: 24),
                 const Text(
-                  'Analisis Keuangan',
+                  'Bon per Pabrik',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -126,13 +135,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildFinancialAnalysis(stats),
+                _buildFactoryBreakdown(stats),
                 const SizedBox(height: 24),
               ],
             ),
           ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, st) => Center(child: Text('Error: $e')),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPresetButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildPresetButton(
+            label: 'Hari Ini',
+            active: _isTodayPreset,
+            onTap: () {
+              setState(() {
+                _dateRange = DateTimeRange(
+                  start: _today(),
+                  end: _today(),
+                );
+              });
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildPresetButton(
+            label: 'Bulan Ini',
+            active: _isMonthPreset,
+            onTap: () {
+              final now = DateTime.now();
+              setState(() {
+                _dateRange = DateTimeRange(
+                  start: DateTime(now.year, now.month, 1),
+                  end: now,
+                );
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPresetButton({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF4318FF) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active
+                ? const Color(0xFF4318FF)
+                : Colors.grey.shade200,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? Colors.white : const Color(0xFF1B2559),
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
         ),
       ),
     );
@@ -231,7 +309,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             right: -20,
             top: -20,
             child: Icon(
-              Icons.account_balance_wallet,
+              Icons.receipt_long,
               size: 150,
               color: Colors.white.withOpacity(0.05),
             ),
@@ -241,50 +319,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                InkWell(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SaldoListScreen()),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.wallet,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          const Text(
-                            'SALDO TERSEDIA SAAT INI',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        currencyFmt.format(stats.currentBalance),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: const Icon(
+                        Icons.receipt_long,
+                        color: Colors.white,
+                        size: 16,
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'TOTAL TRANSAKSI HARIAN',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  currencyFmt.format(stats.totalTransactionValue),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -304,21 +371,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const SaldoListScreen(),
+                            builder: (_) => const BonListScreen(),
                           ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Laba Bersih (Periode)',
+                              'Total Tonase',
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 11,
                               ),
                             ),
                             Text(
-                              currencyFmt.format(stats.netProfit),
+                              '${(stats.totalTonnage / 1000).toStringAsFixed(1)} ton',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -333,21 +400,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const MarginListScreen(),
+                            builder: (_) => const BonListScreen(),
                           ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Margin / Profit',
+                              'Total Bon',
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 11,
                               ),
                             ),
                             Text(
-                              currencyFmt.format(stats.totalMargin),
+                              '${stats.totalBons}',
                               style: const TextStyle(
                                 color: Colors.greenAccent,
                                 fontSize: 16,
@@ -369,32 +436,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildOperationalRow(DashboardStats stats) {
+    final currencyFmt = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+
     return Row(
       children: [
         Expanded(
           child: _buildInfoTile(
-            title: 'Total Bon',
-            value: stats.ongoingBons.toString(),
-            subValue: '${stats.finishedBons} Selesai',
-            icon: Icons.receipt_long,
-            accentColor: Colors.blue,
+            title: 'Total Pembayaran',
+            value: currencyFmt.format(stats.totalPayments),
+            subValue: 'Diterima periode ini',
+            icon: Icons.payments_outlined,
+            accentColor: Colors.teal,
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const BonListScreen()),
+              MaterialPageRoute(builder: (_) => const PaymentListScreen()),
             ),
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: _buildInfoTile(
-            title: 'Nota Penjualan',
-            value: stats.unpaidNotas.toString(),
-            subValue: '${stats.paidNotas} Lunas',
-            icon: Icons.description,
-            accentColor: Colors.orange,
+            title: 'Margin / Profit',
+            value: currencyFmt.format(stats.totalMargin),
+            subValue: 'Net Profit: ${currencyFmt.format(stats.netProfit)}',
+            icon: Icons.trending_up,
+            accentColor: Colors.green,
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const NotaListScreen()),
+              MaterialPageRoute(builder: (_) => const MarginListScreen()),
             ),
           ),
         ),
@@ -471,7 +544,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildFinancialAnalysis(DashboardStats stats) {
+  Widget _buildFactoryBreakdown(DashboardStats stats) {
+    final currencyFmt = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+
+    if (stats.factoryBreakdown.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            'Belum ada bon pada periode ini',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -487,92 +589,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       child: Column(
         children: [
-          _buildFinancialItem(
-            label: 'Total Transaksi (Offtaker)',
-            amount: stats.totalTransactions,
-            color: Colors.black87,
-            icon: Icons.business,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MarginListScreen()),
-            ),
-          ),
-          const Divider(height: 24),
-          _buildFinancialItem(
-            label: 'Total Transaksi Saya',
-            amount: stats.totalMyTransactions,
-            color: Colors.red.shade700,
-            icon: Icons.person_outline,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PaymentListScreen()),
-            ),
-          ),
-          const Divider(height: 24),
-          _buildFinancialItem(
-            label: 'Pengeluaran & Sharing',
-            amount: stats.totalExpenses,
-            color: Colors.orange.shade800,
-            icon: Icons.outbox,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ExpenseListScreen()),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFinancialItem({
-    required String label,
-    required double amount,
-    required Color color,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: Colors.grey.shade700, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    NumberFormat.currency(
-                      locale: 'id_ID',
-                      symbol: 'Rp ',
-                      decimalDigits: 0,
-                    ).format(amount),
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+          for (var i = 0; i < stats.factoryBreakdown.length; i++) ...[
+            if (i > 0) const Divider(height: 24),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        stats.factoryBreakdown[i].name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Color(0xFF1B2559),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    Text(
+                      '${stats.factoryBreakdown[i].count} bon',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${(stats.factoryBreakdown[i].tonnage / 1000).toStringAsFixed(1)} ton',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                    Text(
+                      currencyFmt.format(stats.factoryBreakdown[i].value),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Color(0xFF4318FF),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
-        ),
+        ],
       ),
     );
   }

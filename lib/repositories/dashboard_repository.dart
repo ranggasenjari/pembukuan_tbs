@@ -1,5 +1,21 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+class FactoryBreakdown {
+  final String? factoryId;
+  final String name;
+  final int count;
+  final double tonnage;
+  final double value;
+
+  FactoryBreakdown({
+    this.factoryId,
+    required this.name,
+    required this.count,
+    required this.tonnage,
+    required this.value,
+  });
+}
+
 class DashboardStats {
   final int totalBons;
   final int ongoingBons;
@@ -13,6 +29,12 @@ class DashboardStats {
   final double netProfit;
   final int currentBalance;
 
+  // Fokus transaksi harian
+  final double totalTonnage;
+  final double totalTransactionValue;
+  final double totalPayments;
+  final List<FactoryBreakdown> factoryBreakdown;
+
   DashboardStats({
     required this.totalBons,
     required this.ongoingBons,
@@ -25,6 +47,10 @@ class DashboardStats {
     required this.totalExpenses,
     required this.netProfit,
     required this.currentBalance,
+    this.totalTonnage = 0,
+    this.totalTransactionValue = 0,
+    this.totalPayments = 0,
+    this.factoryBreakdown = const [],
   });
 }
 
@@ -37,20 +63,52 @@ class DashboardRepository {
     final startIso = start.toIso8601String();
     final nextDayEndIso = DateTime.utc(end.year, end.month, end.day + 1).toIso8601String();
 
-    // 1. Bons Stats
+    // 1. Bons Stats (termasuk netto_2 + total + factory name untuk breakdown)
     final bonsResponse = await _client
         .from('bons')
-        .select('id, status')
+        .select('id, status, factory_id, netto_2, total, factories(name)')
         .gte('bon_date', startIso)
         .lt('bon_date', nextDayEndIso);
 
-    final totalBons = (bonsResponse as List).length;
-    final ongoingBons = (bonsResponse)
-        .where((b) => b['status'] != 'LUNAS')
-        .length;
-    final finishedBons = (bonsResponse)
-        .where((b) => b['status'] == 'LUNAS')
-        .length;
+    final bonsList = (bonsResponse as List).cast<Map<String, dynamic>>();
+    final totalBons = bonsList.length;
+    final ongoingBons = bonsList.where((b) => b['status'] != 'LUNAS').length;
+    final finishedBons = bonsList.where((b) => b['status'] == 'LUNAS').length;
+
+    double totalTonnage = 0;
+    double totalTransactionValue = 0;
+    final factoryMap = <String, FactoryBreakdown>{};
+    for (final b in bonsList) {
+      final netto = (b['netto_2'] as num?)?.toDouble() ?? 0.0;
+      final value = (b['total'] as num?)?.toDouble() ?? 0.0;
+      totalTonnage += netto;
+      totalTransactionValue += value;
+      final factoryId = b['factory_id']?.toString();
+      final factories = b['factories'];
+      final name = (factories is Map && factories.containsKey('name'))
+          ? (factories['name']?.toString() ?? 'Tanpa Pabrik')
+          : 'Tanpa Pabrik';
+      final id = factoryId ?? '$name-';
+      final entry = factoryMap.putIfAbsent(
+        id,
+        () => FactoryBreakdown(
+          factoryId: factoryId,
+          name: name,
+          count: 0,
+          tonnage: 0,
+          value: 0,
+        ),
+      );
+      factoryMap[id] = FactoryBreakdown(
+        factoryId: factoryId,
+        name: name,
+        count: entry.count + 1,
+        tonnage: entry.tonnage + netto,
+        value: entry.value + value,
+      );
+    }
+    final factoryBreakdown = factoryMap.values.toList()
+      ..sort((a, b) => b.tonnage.compareTo(a.tonnage));
 
     // 2. Nota Timbangan Stats
     final notasResponse = await _client
@@ -59,27 +117,22 @@ class DashboardRepository {
         .gte('invoice_date', startIso)
         .lt('invoice_date', nextDayEndIso);
 
-    final unpaidNotas = (notasResponse as List)
-        .where((i) => i['status'] != 'LUNAS')
-        .length;
-    final paidNotas = (notasResponse)
-        .where((i) => i['status'] == 'LUNAS')
-        .length;
+    final notasList = (notasResponse as List).cast<Map<String, dynamic>>();
+    final unpaidNotas = notasList.where((i) => i['status'] != 'LUNAS').length;
+    final paidNotas = notasList.where((i) => i['status'] == 'LUNAS').length;
 
     // 3. Financial Stats (Payments & Margins)
-    // Sum all payments in the range to get "Total My Transactions"
     final paymentsResponse = await _client
         .from('payments')
         .select('amount_paid')
         .gte('payment_date', startIso)
         .lt('payment_date', nextDayEndIso);
 
-    double totalMyTransactions = 0;
+    double totalPayments = 0;
     for (var p in (paymentsResponse as List)) {
-      totalMyTransactions += (p['amount_paid'] as num?)?.toDouble() ?? 0.0;
+      totalPayments += (p['amount_paid'] as num?)?.toDouble() ?? 0.0;
     }
 
-    // Sum all margin offtaker amounts in the range to get "Total Transactions"
     final marginsResponse = await _client
         .from('margins')
         .select('offtaker_amount')
@@ -91,11 +144,9 @@ class DashboardRepository {
       totalTransactions += (m['offtaker_amount'] as num?)?.toDouble() ?? 0.0;
     }
 
-    // Margin is the difference between what we got from the offtaker
-    // and what we actually paid out to suppliers.
-    final double totalMargin = totalTransactions - totalMyTransactions;
+    final double totalMargin = totalTransactions - totalPayments;
 
-    // 4. Expense Stats (Profit Sharing / Operasional)
+    // 4. Expense Stats
     final expensesResponse = await _client
         .from('expenses')
         .select('amount')
@@ -109,17 +160,7 @@ class DashboardRepository {
 
     final double netProfit = totalMargin - totalExpenses;
 
-    // 5. Global Balance (Saldo Tersedia)
-    // IMPORTANT: This should probably be ALL time, not just the date range?
-    // User asked for "Saldo pada dashboard". Usually means Balance NOW.
-    // I will fetch GLOBAL totals for Balance.
-
-    // Check if we can use RPC or simple select. Using simple select sum for now.
-    // Note: This logic duplicates what is in Saldo/Payment Repository but keeps Dashboard independent or we could import them?
-    // To keep it clean in one call, I'll do it here. Or better, reuse if possible.
-    // But repos are not singletons injected here easily without Ref.
-    // I'll re-implement the sum logic here for simplicity and performance (can optimize later).
-
+    // 5. Global Balance
     final allDepositsResponse = await _client.from('deposits').select('amount');
     int totalDeposits = 0;
     for (var d in (allDepositsResponse as List)) {
@@ -129,8 +170,7 @@ class DashboardRepository {
     final allPaymentsResponse = await _client
         .from('payments')
         .select('amount_paid');
-    int totalPaymentsGlobal =
-        0; // Distinct from totalMyTransactions which is filtered by date
+    int totalPaymentsGlobal = 0;
     for (var p in (allPaymentsResponse as List)) {
       totalPaymentsGlobal += (p['amount_paid'] as int);
     }
@@ -145,10 +185,14 @@ class DashboardRepository {
       paidNotas: paidNotas,
       totalMargin: totalMargin,
       totalTransactions: totalTransactions,
-      totalMyTransactions: totalMyTransactions,
+      totalMyTransactions: totalPayments,
       totalExpenses: totalExpenses,
       netProfit: netProfit,
       currentBalance: currentBalance,
+      totalTonnage: totalTonnage,
+      totalTransactionValue: totalTransactionValue,
+      totalPayments: totalPayments,
+      factoryBreakdown: factoryBreakdown,
     );
   }
 }

@@ -14,15 +14,17 @@ const notaRepository = require('../repositories/notaRepository');
 const paymentRepository = require('../repositories/paymentRepository');
 const paymentRelationRepository = require('../repositories/paymentRelationRepository');
 const relationAgentRepository = require('../repositories/relationAgentRepository');
+const subNotaRepository = require('../repositories/subNotaRepository');
 const { apiError, apiErrorHandler, apiNotFound, sendOk } = require('../services/apiResponse');
 const { normalizeDeductions, idsFromBody } = require('../services/apiPayload');
 const { resolveBonIdsByTicketNumbers } = require('../services/bonCodeService');
-const { calculateBon } = require('../services/calculations');
+const { calculateBon, applyFactoryDeductionPresets } = require('../services/calculations');
 const { processBonOcr } = require('../services/ocrService');
 const { generateNotaPdf, generateThermalNotaPdf } = require('../services/pdfService');
 const { monthStartInput, todayInput } = require('../services/request');
 const { uploadPublicFile } = require('../services/uploadService');
 const { buildNotaWhatsappMessage, buildPaymentInfoMessage } = require('../services/notaWhatsapp');
+const { env } = require('../config/env');
 
 function sendPdf(res, buffer, fileName, headers = {}) {
   Object.entries(headers).forEach(([name, value]) => {
@@ -45,7 +47,7 @@ function deductionsFromBon(bon) {
 }
 
 async function createBonFromRequest(req, deps) {
-  const deductions = normalizeDeductions(req.body);
+  const deductions = applyFactoryDeductionPresets(req.body.factory_id, normalizeDeductions(req.body));
   const { bonPrice } = await enrichBonInput(req.body, deps, req.supabase);
   const calculated = calculateBon({ ...req.body, price: bonPrice, deductions });
   const imageUrl = await deps.uploadPublicFile(req.supabase, 'receipts', 'bons', req.file);
@@ -71,19 +73,36 @@ async function resolveBonIds(req, deps) {
   return deps.resolveBonIdsByTicketNumbers(req.supabase, req.body.bon_codes);
 }
 
+function resolvePriceOverride(harga) {
+  const value = Number(harga);
+  if (!Number.isFinite(value) || value === 0) return { price: null, offset: 0 };
+  if (value >= -100 && value <= 100) return { price: null, offset: value };
+  return { price: value, offset: 0 };
+}
+
+function isTrue(value) {
+  return value === true || value === 1 || value === '1' || String(value || '').trim().toLowerCase() === 'true';
+}
+
 async function enrichBonInput(body, deps, supabase) {
   const plate = String(body.plate_number || '').replace(/\s+/g, '').toUpperCase();
   let vehicle = null;
+  let paymentRelation = null;
   if (plate) {
     vehicle = await deps.vehicleRepository.getByPlate(supabase, plate);
+    paymentRelation = await deps.paymentRelationRepository.findByPlate(supabase, plate);
   }
 
-  // BP dari kendaraan
-  if (vehicle && vehicle.potongan_bp && (!body.bp_colt || Number(body.bp_colt) === 100000)) {
-    body.bp_colt = vehicle.potongan_bp;
+  // BP: body.bp_colt (non-default) > vehicle.potongan_bp > payment_relation.potongan_bp > tonase
+  if (!body.bp_colt || Number(body.bp_colt) === 100000) {
+    if (vehicle && vehicle.potongan_bp !== null && vehicle.potongan_bp !== undefined && Number(vehicle.potongan_bp) !== 100000) {
+      body.bp_colt = vehicle.potongan_bp;
+    } else if (paymentRelation && paymentRelation.potongan_bp !== null && paymentRelation.potongan_bp !== undefined) {
+      body.bp_colt = paymentRelation.potongan_bp;
+    }
   }
 
-  // BP berdasarkan tonase netto_1 (fallback jika vehicle.potongan_bp tidak ada atau 0)
+  // BP berdasarkan tonase netto_1 (fallback)
   if (!body.bp_colt || Number(body.bp_colt) === 100000) {
     const n1 = Number(body.netto_1) || 0;
     if (n1 > 0 && n1 < 3500) body.bp_colt = 50000;
@@ -91,16 +110,21 @@ async function enrichBonInput(body, deps, supabase) {
     else if (n1 >= 6000) body.bp_colt = 100000;
   }
 
-  // Harga: body.price > SUPER (jika is_super) > vehicle.harga (fixed) > default pabrik > vehicle.harga (offset) > latest
-  let bonPrice = body.price;
+  // Harga: body.price > vehicle.harga > payment_relation.harga > default pabrik > SUPER > offset > latest
   const factoryId = body.factory_id || null;
-  let vehicleHargaIsOffset = false;
+  let bonPrice = body.price;
+  let priceOffset = 0;
+  let hasCustomPrice = false;
   if (!bonPrice && vehicle && vehicle.harga !== null && vehicle.harga !== undefined && vehicle.harga !== 0) {
-    if (vehicle.harga >= -100 && vehicle.harga <= 100) {
-      vehicleHargaIsOffset = true;
-    } else {
-      bonPrice = vehicle.harga;
-    }
+    const r = resolvePriceOverride(vehicle.harga);
+    bonPrice = r.price;
+    priceOffset = r.offset;
+    hasCustomPrice = true;
+  }
+  if (!bonPrice && !hasCustomPrice && paymentRelation && paymentRelation.harga !== null && paymentRelation.harga !== undefined && paymentRelation.harga !== 0) {
+    const r = resolvePriceOverride(paymentRelation.harga);
+    bonPrice = r.price;
+    priceOffset = r.offset;
   }
   if (!bonPrice && factoryId) {
     const factoryPrice = await deps.factoryRepository.getDefaultPrice(supabase, factoryId);
@@ -115,14 +139,23 @@ async function enrichBonInput(body, deps, supabase) {
       const superPrice = (factory?.factory_prices || []).find(p => String(p.name || '').trim().toUpperCase() === 'SUPER');
       if (superPrice && superPrice.price > 0) {
         bonPrice = superPrice.price;
-        vehicleHargaIsOffset = false;
+        priceOffset = 0;
       }
     }
   }
-  if (vehicleHargaIsOffset && bonPrice !== null) {
-    bonPrice = bonPrice + vehicle.harga;
+  if (priceOffset && bonPrice !== null && bonPrice !== undefined) {
+    bonPrice = bonPrice + priceOffset;
   }
   const latestPrice = !bonPrice ? await deps.bonRepository.getLatestPrice(supabase) : 0;
+
+  // Uang minum: body.uang_minum > vehicle.uang_minum > payment_relation.uang_minum > default (netto_2 > 7000)
+  if (body.uang_minum === undefined || body.uang_minum === '') {
+    if (vehicle && vehicle.uang_minum !== null && vehicle.uang_minum !== undefined) {
+      body.uang_minum = vehicle.uang_minum;
+    } else if (paymentRelation && paymentRelation.uang_minum !== null && paymentRelation.uang_minum !== undefined) {
+      body.uang_minum = paymentRelation.uang_minum;
+    }
+  }
 
   // Auto-register kendaraan baru
   if (plate) {
@@ -139,6 +172,108 @@ async function enrichBonInput(body, deps, supabase) {
   return { bonPrice: bonPrice || latestPrice || 0, vehicle };
 }
 
+function resolveOcrTargetChatId(chatId) {
+  const raw = String(chatId || '').trim();
+  if (!raw) return null;
+  const directTargets = new Set(env.ocrDirectTargets || []);
+  if (directTargets.has(raw)) return raw;
+  return (env.ocrChatTargets || {})[raw] || null;
+}
+
+function mimeFromPath(pathOrUrl) {
+  const lower = String(pathOrUrl || '').toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
+}
+
+function filenameFromPath(pathOrUrl) {
+  const parts = String(pathOrUrl || '').split('/');
+  return parts[parts.length - 1] || 'bon.jpg';
+}
+
+async function waSendImage(targetChatId, imageUrl) {
+  const res = await fetch(`${env.wahaBaseUrl}/api/sendImage`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.wahaApiKey
+    },
+    body: JSON.stringify({
+      chatId: targetChatId,
+      file: {
+        mimetype: mimeFromPath(imageUrl),
+        filename: filenameFromPath(imageUrl),
+        url: imageUrl
+      },
+      reply_to: null,
+      caption: '',
+      session: env.wahaSession
+    })
+  });
+  return res;
+}
+
+async function waSendText(targetChatId, text) {
+  const res = await fetch(`${env.wahaBaseUrl}/api/sendText`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.wahaApiKey
+    },
+    body: JSON.stringify({
+      chatId: targetChatId,
+      id: null,
+      reply_to: null,
+      text,
+      linkPreview: true,
+      linkPreviewHighQuality: false,
+      session: env.wahaSession
+    })
+  });
+  return res;
+}
+
+// Kirim hasil OCR: gambar -> nota -> payment (payment hanya jika ada).
+async function sendOcrWhatsapp(deps, supabase, targetChatId, { bon, nota, notaBons, imageUrl, plate }) {
+  if (!targetChatId) return;
+
+  try {
+    if (imageUrl) {
+      const res = await waSendImage(targetChatId, imageUrl);
+      console.log('OCR: WA image response', res.status);
+    }
+  } catch (err) {
+    console.error('OCR: WA image error', err.message);
+  }
+
+  try {
+    const text = nota
+      ? buildNotaWhatsappMessage(nota, notaBons)
+      : `*Bon sudah ada*\n${bon?.ticket_number || ''} - ${bon?.relation_name || bon?.driver_name || '-'}`;
+    const res = await waSendText(targetChatId, text);
+    console.log('OCR: WA nota response', res.status);
+    if (!res.ok) {
+      console.error('OCR: WA nota API error', res.status, await res.text());
+    }
+  } catch (err) {
+    console.error('OCR: WA nota error', err.message);
+  }
+
+  try {
+    const paymentRel = await deps.paymentRelationRepository.findByPlate(supabase, plate);
+    if (paymentRel) {
+      console.log('OCR: payment relation found for', plate, '-', paymentRel.name);
+      const res = await waSendText(targetChatId, buildPaymentInfoMessage(paymentRel));
+      console.log('OCR: WA payment response', res.status);
+    } else {
+      console.log('OCR: no payment relation for plate', plate);
+    }
+  } catch (err) {
+    console.error('OCR: WA payment error', err.message);
+  }
+}
+
 function createApiV1Router(options = {}) {
   const deps = {
     authMiddleware: [requireExternalApiKey, attachSystemSupabase],
@@ -153,6 +288,7 @@ function createApiV1Router(options = {}) {
     paymentRepository,
     paymentRelationRepository,
     relationAgentRepository,
+    subNotaRepository,
     vehicleRepository,
     processBonOcr,
     resolveBonIdsByTicketNumbers,
@@ -177,7 +313,16 @@ function createApiV1Router(options = {}) {
   }));
 
   router.post('/bons/ocr', upload.single('file'), asyncHandler(async (req, res) => {
-    const data = await deps.processBonOcr(req.file, { supabase: req.supabase });
+    if (!req.body.factory_id) throw apiError(400, 'FACTORY_REQUIRED', 'factory_id wajib diisi — pilih pabrik sebelum OCR karena prompt berbeda per pabrik.');
+    const factories = await deps.factoryRepository.listFactories(req.supabase);
+    const factory = factories.find((f) => f.id === String(req.body.factory_id).trim());
+    if (!factory) throw apiError(404, 'FACTORY_NOT_FOUND', 'Pabrik tidak ditemukan.');
+    const data = await deps.processBonOcr(req.file, {
+      supabase: req.supabase,
+      factory_id: req.body.factory_id,
+      factory_name: factory.name,
+      factories
+    });
     sendOk(res, data);
   }));
 
@@ -188,6 +333,7 @@ function createApiV1Router(options = {}) {
 
   router.post('/bons/from-ocr', asyncHandler(async (req, res) => {
     const body = Array.isArray(req.body) ? req.body[0] : req.body;
+    const targetChatId = resolveOcrTargetChatId(body.chat_id);
     if (!body.plate_number || !body.bon_date) {
       throw apiError(400, 'VALIDATION_ERROR', 'plate_number dan bon_date wajib diisi.');
     }
@@ -210,28 +356,28 @@ function createApiV1Router(options = {}) {
         console.error('OCR: duplicate check error', dupError);
       } else if (existingBons && existingBons.length > 0) {
         console.log('OCR: duplicate bon detected, skipping insert', dupPlate, dupN1, dupN2, dupDate);
-        // Kirim WA "Bon ini sudah ada di sistem"
-        try {
-          const dupPayload = {
-            chatId: '120363402074969776@g.us',
-            id: null,
-            reply_to: null,
-            text: 'Bon ini sudah ada di sistem',
-            linkPreview: true,
-            linkPreviewHighQuality: false,
-            session: 'stj'
-          };
-          const dupRes = await fetch('http://pflkt.langkatkab.go.id:3330/api/sendText', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': 'key_uchDI718apm4ceHSLZIFBPSd6X6qQuud'
-            },
-            body: JSON.stringify(dupPayload)
-          });
-          console.log('OCR: duplicate WA response status', dupRes.status);
-        } catch (dupWaError) {
-          console.error('OCR: duplicate WA send error', dupWaError.message);
+        // Kirim WA "Bon ini sudah ada di sistem", lalu kirim ulang data bon yang sudah ada.
+        if (targetChatId) {
+          try {
+            await waSendText(targetChatId, 'Bon ini sudah ada di sistem');
+          } catch (dupWaError) {
+            console.error('OCR: duplicate WA send error', dupWaError.message);
+          }
+          try {
+            const dupBon = await deps.bonRepository.getBon(req.supabase, existingBons[0].id);
+            const related = await deps.bonRepository.getRelatedRecords(req.supabase, existingBons[0].id);
+            const dupNota = (related.notas || [])[0];
+            const dupNotaBons = dupNota ? await deps.notaRepository.getNotaBons(req.supabase, dupNota.id) : [];
+            await sendOcrWhatsapp(deps, req.supabase, targetChatId, {
+              bon: dupBon,
+              nota: dupNota,
+              notaBons: dupNotaBons,
+              imageUrl: dupBon?.image_url || null,
+              plate: dupPlate
+            });
+          } catch (dupResendError) {
+            console.error('OCR: duplicate resend error', dupResendError.message);
+          }
         }
         return sendOk(res, { duplicate: true, message: 'Bon ini sudah ada di sistem' }, undefined, 200);
       }
@@ -245,14 +391,37 @@ function createApiV1Router(options = {}) {
       body.factory_name = 'PT. AWAN ALAM ANUGRA';
     }
 
-    // Cari relasi dari nama atau gunakan langsung jika dikirim
-    let relationAgentId = body.relation_agent_id || null;
-    if (!relationAgentId && body.relation_name) {
+    // Cari relasi: validasi ID yang dikirim, fallback ke nama, atau buat master baru.
+    let relationAgentId = null;
+    const ocrRelationName = String(body.relation_name || '').trim();
+    if (body.relation_agent_id || ocrRelationName) {
       const agents = await deps.relationAgentRepository.listRelationAgents(req.supabase);
-      const match = agents.find(
-        (a) => String(a.name || '').trim().toUpperCase() === String(body.relation_name).trim().toUpperCase()
-      );
-      if (match) relationAgentId = match.id;
+      const normalize = (s) => String(s || '').trim().toUpperCase();
+      const byId = body.relation_agent_id
+        ? agents.find((a) => a.id === body.relation_agent_id)
+        : null;
+      const byName = ocrRelationName
+        ? agents.find((a) => normalize(a.name) === normalize(ocrRelationName))
+        : null;
+
+      if (byId) {
+        relationAgentId = byId.id;
+      } else if (byName) {
+        relationAgentId = byName.id;
+      } else if (ocrRelationName) {
+        // ID tidak valid & nama belum ada: buat master relasi agar FK selalu aman.
+        try {
+          const created = await deps.relationAgentRepository.createRelationAgent(req.supabase, {
+            name: ocrRelationName,
+            address: body.fruit_origin || null
+          });
+          relationAgentId = created.id;
+          console.log('OCR: relation agent dibuat dari OCR:', ocrRelationName, created.id);
+        } catch (relErr) {
+          console.error('OCR: gagal membuat relasi agent', relErr.message);
+          relationAgentId = null;
+        }
+      }
     }
 
     // Cari pabrik; jika dikirim langsung, gunakan factory_spsi_type_id langsung
@@ -300,21 +469,29 @@ function createApiV1Router(options = {}) {
       }
     }
 
-    // Harga: body.price > SUPER (jika is_super) > vehicle.harga (fixed) > default pabrik > vehicle.harga (offset) > latest
+    // Harga: body.price > vehicle.harga > payment_relation.harga > default pabrik > SUPER > offset > latest
     const ocrPlate = String(body.plate_number || '').replace(/\s+/g, '').toUpperCase();
     let vehicle = null;
+    let paymentRelation = null;
     if (ocrPlate) {
       vehicle = await vehicleRepository.getByPlate(req.supabase, ocrPlate);
+      paymentRelation = await deps.paymentRelationRepository.findByPlate(req.supabase, ocrPlate);
     }
     let bonPrice = body.price;
-    let vehicleHargaIsOffset = false;
+    let priceOffset = 0;
+    let hasCustomPrice = false;
 
     if (!bonPrice && vehicle && vehicle.harga !== null && vehicle.harga !== undefined && vehicle.harga !== 0) {
-      if (vehicle.harga >= -100 && vehicle.harga <= 100) {
-        vehicleHargaIsOffset = true;
-      } else {
-        bonPrice = vehicle.harga;
-      }
+      const r = resolvePriceOverride(vehicle.harga);
+      bonPrice = r.price;
+      priceOffset = r.offset;
+      hasCustomPrice = true;
+    }
+
+    if (!bonPrice && !hasCustomPrice && paymentRelation && paymentRelation.harga !== null && paymentRelation.harga !== undefined && paymentRelation.harga !== 0) {
+      const r = resolvePriceOverride(paymentRelation.harga);
+      bonPrice = r.price;
+      priceOffset = r.offset;
     }
 
     if (!bonPrice && factoryId) {
@@ -331,30 +508,48 @@ function createApiV1Router(options = {}) {
         const superPrice = (factory?.factory_prices || []).find(p => String(p.name || '').trim().toUpperCase() === 'SUPER');
         if (superPrice && superPrice.price > 0) {
           bonPrice = superPrice.price;
-          vehicleHargaIsOffset = false;
+          priceOffset = 0;
         }
       }
     }
 
-    if (vehicleHargaIsOffset && bonPrice !== null) {
-      bonPrice = bonPrice + vehicle.harga;
+    if (priceOffset && bonPrice !== null && bonPrice !== undefined) {
+      bonPrice = bonPrice + priceOffset;
     }
     const latestPrice = !bonPrice ? await deps.bonRepository.getLatestPrice(req.supabase) : 0;
 
-    // Ambil potongan BP dari data kendaraan jika ada
-    if (vehicle && vehicle.potongan_bp && (!body.bp_colt || Number(body.bp_colt) === 100000)) {
-      body.bp_colt = vehicle.potongan_bp;
+    // is_tutup selalu membebaskan BP, mengalahkan pengaturan kendaraan/relasi/tonase.
+    if (isTrue(body.is_tutup)) {
+      body.bp_colt = 0;
+    } else {
+      // BP: body.bp_colt (non-default) > vehicle.potongan_bp > payment_relation.potongan_bp > tonase
+      if (!body.bp_colt || Number(body.bp_colt) === 100000) {
+        if (vehicle && vehicle.potongan_bp !== null && vehicle.potongan_bp !== undefined && Number(vehicle.potongan_bp) !== 100000) {
+          body.bp_colt = vehicle.potongan_bp;
+        } else if (paymentRelation && paymentRelation.potongan_bp !== null && paymentRelation.potongan_bp !== undefined) {
+          body.bp_colt = paymentRelation.potongan_bp;
+        }
+      }
+
+      // BP berdasarkan tonase netto_1 (fallback)
+      if (!body.bp_colt || Number(body.bp_colt) === 100000) {
+        const n1 = Number(body.netto_1) || 0;
+        if (n1 > 0 && n1 < 3500) body.bp_colt = 50000;
+        else if (n1 >= 3500 && n1 < 6000) body.bp_colt = 70000;
+        else if (n1 >= 6000) body.bp_colt = 100000;
+      }
     }
 
-    // BP berdasarkan tonase netto_1 (fallback jika vehicle.potongan_bp tidak ada atau 0)
-    if (!body.bp_colt || Number(body.bp_colt) === 100000) {
-      const n1 = Number(body.netto_1) || 0;
-      if (n1 > 0 && n1 < 3500) body.bp_colt = 50000;
-      else if (n1 >= 3500 && n1 < 6000) body.bp_colt = 70000;
-      else if (n1 >= 6000) body.bp_colt = 100000;
+    // Uang minum: body.uang_minum > vehicle.uang_minum > payment_relation.uang_minum > default
+    if (body.uang_minum === undefined || body.uang_minum === '') {
+      if (vehicle && vehicle.uang_minum !== null && vehicle.uang_minum !== undefined) {
+        body.uang_minum = vehicle.uang_minum;
+      } else if (paymentRelation && paymentRelation.uang_minum !== null && paymentRelation.uang_minum !== undefined) {
+        body.uang_minum = paymentRelation.uang_minum;
+      }
     }
 
-    const deductions = [];
+    const deductions = applyFactoryDeductionPresets(factoryId, []);
     const calculated = calculateBon({
       ...body,
       factory_id: factoryId,
@@ -363,7 +558,7 @@ function createApiV1Router(options = {}) {
       biaya_bongkar: biayaBongkar,
       spsi_calculation_mode: spsiCalcMode,
       spsi_rate: spsiRate,
-      bp_colt: body.bp_colt || 100000,
+      bp_colt: body.bp_colt === undefined || body.bp_colt === '' ? 100000 : body.bp_colt,
       deductions
     });
 
@@ -407,77 +602,28 @@ function createApiV1Router(options = {}) {
 
     // Auto-generate nota dan kirim ke WhatsApp
     console.log('OCR: starting WA send for bon', bon.id);
-    try {
-      const relationName = body.relation_name || body.driver_name || '-';
-      console.log('OCR: creating nota for', relationName);
-      const nota = await deps.notaRepository.createNota(req.supabase, {
-        relation_agent_id: relationAgentId,
-        recipient_name: relationName,
-        recipient_address: body.fruit_origin || null
-      }, [bon.id]);
-      console.log('OCR: nota created', nota?.id);
-
-      const notaBons = await deps.notaRepository.getNotaBons(req.supabase, nota.id);
-      const waText = buildNotaWhatsappMessage(nota, notaBons);
-      console.log('OCR: waText length', waText.length);
-
-      const waPayload = {
-        chatId: '120363402074969776@g.us',
-        id: null,
-        reply_to: null,
-        text: waText,
-        linkPreview: true,
-        linkPreviewHighQuality: false,
-        session: 'stj'
-      };
-      console.log('OCR: sending WA to', waPayload.chatId);
-
-      const waRes = await fetch('http://pflkt.langkatkab.go.id:3330/api/sendText', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': 'key_uchDI718apm4ceHSLZIFBPSd6X6qQuud'
-        },
-        body: JSON.stringify(waPayload)
-      });
-      console.log('OCR: WA response status', waRes.status);
-      if (!waRes.ok) {
-        const waBody = await waRes.text();
-        console.error('WhatsApp API error:', waRes.status, waBody);
-      }
-
-      // Cari relasi bayar berdasarkan plat nomor
+    if (targetChatId) {
       try {
-        const paymentRel = await deps.paymentRelationRepository.findByPlate(req.supabase, plate);
-        if (paymentRel) {
-          console.log('OCR: payment relation found for', plate, '-', paymentRel.name);
-          const payText = buildPaymentInfoMessage(paymentRel);
-          const payPayload = {
-            chatId: '120363402074969776@g.us',
-            id: null,
-            reply_to: null,
-            text: payText,
-            linkPreview: true,
-            linkPreviewHighQuality: false,
-            session: 'stj'
-          };
-          const payRes = await fetch('http://pflkt.langkatkab.go.id:3330/api/sendText', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': 'key_uchDI718apm4ceHSLZIFBPSd6X6qQuud'
-            },
-            body: JSON.stringify(payPayload)
-          });
-          console.log('OCR: payment WA response', payRes.status);
-        } else {
-          console.log('OCR: no payment relation for plate', plate);
-        }
-      } catch (payError) {
-        console.error('OCR: payment relation WA error:', payError.message);
+        const relationName = body.relation_name || body.driver_name || '-';
+        console.log('OCR: creating nota for', relationName);
+        const nota = await deps.notaRepository.createNota(req.supabase, {
+          relation_agent_id: relationAgentId,
+          recipient_name: relationName,
+          recipient_address: body.fruit_origin || null
+        }, [bon.id]);
+        console.log('OCR: nota created', nota?.id);
+
+        const notaBons = await deps.notaRepository.getNotaBons(req.supabase, nota.id);
+        await sendOcrWhatsapp(deps, req.supabase, targetChatId, {
+          bon,
+          nota,
+          notaBons,
+          imageUrl,
+          plate
+        });
+      } catch (waError) {
+        console.error('WhatsApp send error:', waError.message);
       }
-    } catch (waError) {
-      console.error('WhatsApp send error:', waError.message);
     }
     console.log('OCR: WA flow complete');
 
@@ -492,12 +638,12 @@ function createApiV1Router(options = {}) {
     sendOk(res, { bon, related });
   }));
 
-  router.get('/bons/recalc/:id', asyncHandler(async (req, res) => {
+  router.post('/bons/:id/recalc', asyncHandler(async (req, res) => {
     let bon;
     try {
       bon = await deps.bonRepository.getBon(req.supabase, req.params.id);
     } catch (e) {
-      return sendOk(res, null, { error: 'Bon tidak ditemukan' }, 404);
+      throw apiError(404, 'BON_NOT_FOUND', 'Bon tidak ditemukan');
     }
 
     const deductions = (bon.bon_deductions || []).map(d => ({ label: d.label, amount: d.amount }));
@@ -512,11 +658,11 @@ function createApiV1Router(options = {}) {
       }
     }
 
-    const calculated = calculateBon({ ...bon, pph: undefined, uang_minum: undefined, deductions });
+    const calculated = calculateBon({ ...bon, deductions });
     const { pph, uang_minum, total, spsi_amount } = calculated;
 
     const { error: bonError } = await req.supabase.from('bons').update({ pph, uang_minum, total, spsi_amount }).eq('id', req.params.id);
-    if (bonError) return sendOk(res, null, { error: bonError.message }, 500);
+    if (bonError) throw apiError(500, 'RECALC_FAILED', bonError.message);
 
     // Jika bon terikat nota, hitung ulang total_amount nota
     const related = await deps.bonRepository.getRelatedRecords(req.supabase, req.params.id);
@@ -530,6 +676,41 @@ function createApiV1Router(options = {}) {
     sendOk(res, { recalculated: { pph, uang_minum, total, spsi_amount }, nota_total_updated: related.notas.length > 0, bon: updated });
   }));
 
+  // Deprecated alias — tetap didukung untuk kompatibilitas
+  router.get('/bons/recalc/:id', asyncHandler(async (req, res) => {
+    let bon;
+    try {
+      bon = await deps.bonRepository.getBon(req.supabase, req.params.id);
+    } catch (e) {
+      throw apiError(404, 'BON_NOT_FOUND', 'Bon tidak ditemukan');
+    }
+    const deductions = (bon.bon_deductions || []).map(d => ({ label: d.label, amount: d.amount }));
+    const factoryId = bon.factory_id;
+    if (factoryId) {
+      const factory = await deps.factoryRepository.getFactory(req.supabase, factoryId);
+      const spsiType = (factory?.factory_spsi_types || []).find(t => t.id === bon.factory_spsi_type_id);
+      if (spsiType) {
+        bon.spsi_calculation_mode = spsiType.calculation_mode;
+        bon.spsi_rate = spsiType.amount;
+        bon.biaya_bongkar = spsiType.amount;
+      }
+    }
+    const calculated = calculateBon({ ...bon, deductions });
+    const { pph, uang_minum, total, spsi_amount } = calculated;
+    const { error: bonError } = await req.supabase.from('bons').update({ pph, uang_minum, total, spsi_amount }).eq('id', req.params.id);
+    if (bonError) throw apiError(500, 'RECALC_FAILED', bonError.message);
+    const related = await deps.bonRepository.getRelatedRecords(req.supabase, req.params.id);
+    for (const nota of related.notas) {
+      const notaBons = await deps.notaRepository.getNotaBons(req.supabase, nota.id);
+      const newTotal = notaBons.reduce((sum, b) => sum + Number(b.total || 0), 0);
+      await req.supabase.from('notas').update({ total_amount: newTotal }).eq('id', nota.id);
+    }
+    const updated = await deps.bonRepository.getBon(req.supabase, req.params.id);
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Sunset', new Date(Date.now() + 90*24*60*60*1000).toUTCString());
+    sendOk(res, { recalculated: { pph, uang_minum, total, spsi_amount }, nota_total_updated: related.notas.length > 0, bon: updated });
+  }));
+
   router.patch('/bons/:id', upload.single('image'), asyncHandler(async (req, res) => {
     const bon = await updateBonFromRequest(req, deps);
     sendOk(res, bon);
@@ -537,6 +718,22 @@ function createApiV1Router(options = {}) {
 
   router.delete('/bons/:id', asyncHandler(async (req, res) => {
     await deps.bonRepository.deleteBon(req.supabase, req.params.id);
+    sendOk(res, { deleted: true });
+  }));
+
+  // Sub Nota
+  router.get('/bons/:id/sub-notas', asyncHandler(async (req, res) => {
+    const subNotas = await deps.subNotaRepository.listByBon(req.supabase, req.params.id);
+    sendOk(res, subNotas, { count: subNotas.length });
+  }));
+
+  router.post('/bons/:id/sub-notas', asyncHandler(async (req, res) => {
+    const subNota = await deps.subNotaRepository.createForBon(req.supabase, req.params.id, req.body);
+    sendOk(res, subNota, undefined, 201);
+  }));
+
+  router.delete('/sub-notas/:id', asyncHandler(async (req, res) => {
+    await deps.subNotaRepository.deleteSubNota(req.supabase, req.params.id);
     sendOk(res, { deleted: true });
   }));
 
@@ -582,16 +779,16 @@ function createApiV1Router(options = {}) {
       deps.notaRepository.getNota(req.supabase, req.params.id),
       deps.notaRepository.getNotaBons(req.supabase, req.params.id)
     ]);
-    if (!nota) return sendOk(res, null, { error: 'Nota tidak ditemukan' }, 404);
+    if (!nota) throw apiError(404, 'NOTA_NOT_FOUND', 'Nota tidak ditemukan');
 
     const waText = buildNotaWhatsappMessage(nota, bons);
     const chatId = req.params.whatsapp_id;
 
-    const waRes = await fetch('http://pflkt.langkatkab.go.id:3330/api/sendText', {
+    const waRes = await fetch(`${env.wahaBaseUrl}/api/sendText`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': 'key_uchDI718apm4ceHSLZIFBPSd6X6qQuud'
+        'x-api-key': env.wahaApiKey
       },
       body: JSON.stringify({
         chatId,
@@ -600,13 +797,13 @@ function createApiV1Router(options = {}) {
         text: waText,
         linkPreview: true,
         linkPreviewHighQuality: false,
-        session: 'stj'
+        session: env.wahaSession
       })
     });
 
     const body = await waRes.text();
     if (!waRes.ok) {
-      return sendOk(res, null, { error: 'Gagal kirim WA', detail: body }, 500);
+      throw apiError(500, 'WA_SEND_FAILED', 'Gagal kirim WA', body);
     }
 
     sendOk(res, { message: 'WA terkirim', chatId });
@@ -661,6 +858,17 @@ function createApiV1Router(options = {}) {
   router.delete('/notas/:id', asyncHandler(async (req, res) => {
     await deps.notaRepository.deleteNota(req.supabase, req.params.id);
     sendOk(res, { deleted: true });
+  }));
+
+  router.post('/notas/:id/settle', asyncHandler(async (req, res) => {
+    const nota = await deps.notaRepository.getNota(req.supabase, req.params.id);
+    if (!nota) throw apiError(404, 'NOTA_NOT_FOUND', 'Nota tidak ditemukan');
+    if (nota.status === 'LUNAS') throw apiError(400, 'NOTA_ALREADY_LUNAS', 'Nota sudah lunas');
+    const payment = await deps.paymentRepository.settleNotaWithoutProof(req.supabase, nota.id, {
+      amountPaid: nota.total_amount,
+      paymentDate: req.body.payment_date || todayInput()
+    });
+    sendOk(res, payment, undefined, 201);
   }));
 
   router.get('/payments', asyncHandler(async (req, res) => {
@@ -799,6 +1007,88 @@ function createApiV1Router(options = {}) {
   router.delete('/expenses/:id', asyncHandler(async (req, res) => {
     await deps.expenseRepository.deleteExpense(req.supabase, req.params.id);
     sendOk(res, { deleted: true });
+  }));
+
+  // ── Factories ──
+  router.get('/factories', asyncHandler(async (req, res) => {
+    const factories = await deps.factoryRepository.listFactories(req.supabase);
+    sendOk(res, factories, { count: factories.length });
+  }));
+  router.post('/factories', asyncHandler(async (req, res) => {
+    const factory = await deps.factoryRepository.createFactory(req.supabase, req.body);
+    sendOk(res, factory, undefined, 201);
+  }));
+  router.get('/factories/:id', asyncHandler(async (req, res) => {
+    const factory = await deps.factoryRepository.getFactory(req.supabase, req.params.id);
+    sendOk(res, factory);
+  }));
+  router.patch('/factories/:id', asyncHandler(async (req, res) => {
+    const factory = await deps.factoryRepository.updateFactory(req.supabase, req.params.id, req.body);
+    sendOk(res, factory);
+  }));
+  router.delete('/factories/:id', asyncHandler(async (req, res) => {
+    await deps.factoryRepository.deleteFactory(req.supabase, req.params.id);
+    sendOk(res, { deleted: true });
+  }));
+
+  // ── Payment Relations (relasi bayar) ──
+  router.get('/payment-relations', asyncHandler(async (req, res) => {
+    const relations = await deps.paymentRelationRepository.listPaymentRelations(req.supabase, { q: req.query.q });
+    sendOk(res, relations, { count: relations.length });
+  }));
+  router.post('/payment-relations', asyncHandler(async (req, res) => {
+    const relation = await deps.paymentRelationRepository.createPaymentRelation(req.supabase, req.body);
+    sendOk(res, relation, undefined, 201);
+  }));
+  router.get('/payment-relations/:id', asyncHandler(async (req, res) => {
+    const relation = await deps.paymentRelationRepository.getPaymentRelation(req.supabase, req.params.id);
+    sendOk(res, relation);
+  }));
+  router.patch('/payment-relations/:id', asyncHandler(async (req, res) => {
+    const relation = await deps.paymentRelationRepository.updatePaymentRelation(req.supabase, req.params.id, req.body);
+    sendOk(res, relation);
+  }));
+  router.delete('/payment-relations/:id', asyncHandler(async (req, res) => {
+    await deps.paymentRelationRepository.deletePaymentRelation(req.supabase, req.params.id);
+    sendOk(res, { deleted: true });
+  }));
+
+  // ── Vehicles ──
+  router.get('/vehicles', asyncHandler(async (req, res) => {
+    const vehicles = await deps.vehicleRepository.listEnriched(req.supabase, { q: req.query.q });
+    sendOk(res, vehicles, { count: vehicles.length });
+  }));
+  router.get('/vehicles/:id', asyncHandler(async (req, res) => {
+    const vehicle = await deps.vehicleRepository.get(req.supabase, req.params.id);
+    sendOk(res, vehicle);
+  }));
+  router.post('/vehicles', asyncHandler(async (req, res) => {
+    const vehicle = await deps.vehicleRepository.create(req.supabase, req.body);
+    sendOk(res, vehicle, undefined, 201);
+  }));
+  router.patch('/vehicles/:id', asyncHandler(async (req, res) => {
+    const vehicle = await deps.vehicleRepository.update(req.supabase, req.params.id, req.body);
+    sendOk(res, vehicle);
+  }));
+  router.delete('/vehicles/:id', asyncHandler(async (req, res) => {
+    await deps.vehicleRepository.remove(req.supabase, req.params.id);
+    sendOk(res, { deleted: true });
+  }));
+  router.post('/vehicles/:id/payment-relation', asyncHandler(async (req, res) => {
+    const relationId = String(req.body.payment_relation_id || '').trim();
+    if (relationId) {
+      await deps.paymentRelationRepository.bindVehicle(req.supabase, relationId, req.params.id);
+      sendOk(res, { bound: true, payment_relation_id: relationId });
+    } else {
+      const { error } = await req.supabase.from('payment_relation_vehicles').delete().eq('vehicle_id', req.params.id);
+      if (error) throw apiError(500, 'UNBIND_FAILED', error.message);
+      sendOk(res, { bound: false });
+    }
+  }));
+  router.post('/vehicles/:id/payment-relation/new', asyncHandler(async (req, res) => {
+    const relation = await deps.paymentRelationRepository.createPaymentRelation(req.supabase, req.body);
+    await deps.paymentRelationRepository.bindVehicle(req.supabase, relation.id, req.params.id);
+    sendOk(res, relation, undefined, 201);
   }));
 
   router.get('/reports/ledger', asyncHandler(async (req, res) => {

@@ -130,6 +130,48 @@
           "amount": { "type": "number" },
           "created_at": { "type": "string", "format": "date-time" }
         }
+      },
+      "Factory": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "address": { "type": "string" },
+          "factory_spsi_types": { "type": "array", "items": { "type": "object" } },
+          "factory_prices": { "type": "array", "items": { "type": "object" } },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaymentRelation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "contact": { "type": "string" },
+          "address": { "type": "string" },
+          "notes": { "type": "string" },
+          "fee": { "type": "number" },
+          "potongan_bp": { "type": "number" },
+          "harga": { "type": "number" },
+          "uang_minum": { "type": "number" },
+          "payment_relation_accounts": { "type": "array", "items": { "type": "object" } },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Vehicle": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "plate_number": { "type": "string" },
+          "driver_name": { "type": "string" },
+          "potongan_bp": { "type": "number" },
+          "harga": { "type": "number" },
+          "uang_minum": { "type": "number" },
+          "is_super": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
       }
     }
   },
@@ -218,7 +260,8 @@
                     "spsi_calculation_mode": { "type": "string", "enum": ["PER_KG", "FIX"], "description": "Mode hitung SPSI" },
                     "spsi_rate": { "type": "number", "description": "Nilai SPSI" },
                     "netto_1": { "type": "number" },
-                    "netto_2": { "type": "number" }
+                    "netto_2": { "type": "number" },
+                    "is_tutup": { "type": "boolean", "description": "Jika true, BP/Colt diset 0" }
                   },
                   "required": ["bon_date", "plate_number"]
                 }
@@ -233,7 +276,7 @@
     },
     "/bons/ocr": {
       "post": {
-        "summary": "OCR gambar bon",
+        "summary": "OCR gambar bon (wajib pilih pabrik — prompt berbeda per pabrik)",
         "tags": ["Bon"],
         "requestBody": {
           "required": true,
@@ -242,14 +285,18 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "file": { "type": "string", "format": "binary", "description": "File gambar bon" }
-                }
+                  "file": { "type": "string", "format": "binary", "description": "File gambar bon" },
+                  "factory_id": { "type": "string", "description": "ID pabrik (wajib — menentukan prompt & schema OCR)" }
+                },
+                "required": ["file", "factory_id"]
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "Data hasil OCR" }
+          "200": { "description": "Data hasil OCR (data + image_path/image_url/mode)" },
+          "400": { "description": "factory_id atau file tidak diisi" },
+          "404": { "description": "Pabrik tidak ditemukan" }
         }
       }
     },
@@ -743,6 +790,90 @@
             }
           }
         }
+      }
+    },
+    "/bons/{id}/recalc": {
+      "post": {
+        "summary": "Hitung ulang bon (pph, uang_makan, total, spsi)",
+        "tags": ["Bon"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Bon terhitung ulang" } }
+      }
+    },
+    "/bons/{id}/sub-notas": {
+      "get": {
+        "summary": "Daftar sub-nota per bon",
+        "tags": ["Bon"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Daftar sub-nota" } }
+      },
+      "post": {
+        "summary": "Tambah sub-nota ke bon",
+        "tags": ["Bon"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "amount": { "type": "number" } } } } } },
+        "responses": { "201": { "description": "Sub-nota created" } }
+      }
+    },
+    "/sub-notas/{id}": {
+      "delete": {
+        "summary": "Hapus sub-nota",
+        "tags": ["Bon"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Sub-nota deleted" } }
+      }
+    },
+    "/notas/{id}/settle": {
+      "post": {
+        "summary": "Lunasi nota tanpa bukti (Nota selesai)",
+        "tags": ["Nota"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "properties": { "payment_date": { "type": "string", "format": "date" } } } } } },
+        "responses": { "201": { "description": "Nota dilunasi" } }
+      }
+    },
+    "/factories": {
+      "get": { "summary": "Daftar pabrik", "tags": ["Factory"], "responses": { "200": { "description": "Daftar pabrik" } } },
+      "post": { "summary": "Tambah pabrik", "tags": ["Factory"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "201": { "description": "Factory created" } } }
+    },
+    "/factories/{id}": {
+      "get": { "summary": "Detail pabrik", "tags": ["Factory"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Detail pabrik" } } },
+      "patch": { "summary": "Update pabrik", "tags": ["Factory"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Factory updated" } } },
+      "delete": { "summary": "Hapus pabrik", "tags": ["Factory"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Factory deleted" } } }
+    },
+    "/payment-relations": {
+      "get": { "summary": "Daftar relasi bayar", "tags": ["PaymentRelation"], "parameters": [{ "in": "query", "name": "q", "schema": { "type": "string" } }], "responses": { "200": { "description": "Daftar relasi bayar" } } },
+      "post": { "summary": "Tambah relasi bayar", "tags": ["PaymentRelation"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "201": { "description": "Payment relation created" } } }
+    },
+    "/payment-relations/{id}": {
+      "get": { "summary": "Detail relasi bayar", "tags": ["PaymentRelation"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Detail relasi bayar" } } },
+      "patch": { "summary": "Update relasi bayar", "tags": ["PaymentRelation"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Payment relation updated" } } },
+      "delete": { "summary": "Hapus relasi bayar", "tags": ["PaymentRelation"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Payment relation deleted" } } }
+    },
+    "/vehicles": {
+      "get": { "summary": "Daftar kendaraan (enriched, terurut bon terbaru)", "tags": ["Vehicle"], "parameters": [{ "in": "query", "name": "q", "schema": { "type": "string" } }], "responses": { "200": { "description": "Daftar kendaraan" } } },
+      "post": { "summary": "Tambah kendaraan", "tags": ["Vehicle"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "201": { "description": "Vehicle created" } } }
+    },
+    "/vehicles/{id}": {
+      "get": { "summary": "Detail kendaraan", "tags": ["Vehicle"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Detail kendaraan" } } },
+      "patch": { "summary": "Update kendaraan", "tags": ["Vehicle"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Vehicle updated" } } },
+      "delete": { "summary": "Hapus kendaraan", "tags": ["Vehicle"], "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Vehicle deleted" } } }
+    },
+    "/vehicles/{id}/payment-relation": {
+      "post": {
+        "summary": "Ikat/lepas relasi bayar ke kendaraan",
+        "tags": ["Vehicle"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "payment_relation_id": { "type": "string", "description": "Kosongkan untuk lepas" } } } } } },
+        "responses": { "200": { "description": "Bound/unbound" } }
+      }
+    },
+    "/vehicles/{id}/payment-relation/new": {
+      "post": {
+        "summary": "Buat relasi bayar baru & ikat ke kendaraan",
+        "tags": ["Vehicle"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "201": { "description": "Payment relation created & bound" } }
       }
     }
   }

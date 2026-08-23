@@ -86,4 +86,58 @@ describe('settingsRoutes', () => {
       mistral_output_schema: '{}'
     });
   });
+
+  it('stores per-factory prompt and schema settings', async () => {
+    const { app, supabase } = makeApp();
+    const response = await request(app)
+      .post('/settings/ocr')
+      .send({
+        mode: 'internal',
+        webhook_url: 'https://ocr.test/webhook',
+        mistral_prompt: 'Default prompt',
+        mistral_output_schema: '{}',
+        factory_settings: {
+          f1: {
+            factory_id: 'f1',
+            factory_name: 'PT PABRIK A',
+            prompt: 'Prompt pabrik A',
+            output_schema: '{"type":"x"}'
+          }
+        }
+      });
+
+    expect(response.status).toBe(302);
+    expect(supabase.state.row.value.factory_settings.f1).toMatchObject({
+      factory_id: 'f1',
+      factory_name: 'PT PABRIK A',
+      prompt: 'Prompt pabrik A',
+      output_schema: '{"type":"x"}'
+    });
+  });
+
+  it('removes a factory setting when the remove flag is posted', async () => {
+    const current = {
+      factory_settings: {
+        f1: { factory_id: 'f1', factory_name: 'PT PABRIK A', prompt: 'p', output_schema: '{}' }
+      }
+    };
+    const { app, supabase } = makeApp(makeSupabase({ ...current }));
+    const response = await request(app)
+      .post('/settings/ocr')
+      .send({
+        mode: 'webhook',
+        webhook_url: 'https://ocr.test/webhook',
+        factory_settings: {
+          f1: {
+            factory_id: 'f1',
+            factory_name: 'PT PABRIK A',
+            remove: '1'
+          }
+        }
+      });
+
+    expect(response.status).toBe(302);
+    expect(supabase.state.row.value.factory_settings.f1).toBeUndefined();
+    expect(supabase.state.row.value.factory_settings).toEqual({});
+  });
 });

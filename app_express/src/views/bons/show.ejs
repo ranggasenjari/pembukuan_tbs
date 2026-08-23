@@ -51,10 +51,59 @@
 </section>
 
 <section class="mt-5 form-card">
-  <h2>Dokumen Terkait</h2>
-  <% if (!related.notas.length && !related.payments.length) { %>
-    <p class="empty">Belum ada nota atau pembayaran terkait.</p>
+  <h2>Sub Nota</h2>
+  <% if (!subNotas.length) { %>
+    <p class="empty">Belum ada sub nota untuk bon ini.</p>
   <% } %>
+  <table class="table-auto w-full text-sm mb-4">
+    <thead>
+      <tr class="text-left text-slate-500">
+        <th class="py-1 pr-2">Nama</th>
+        <th class="py-1 pr-2">Harga (Rp/kg)</th>
+        <th class="py-1 pr-2">Netto 2</th>
+        <th class="py-1 pr-2">Total</th>
+        <th class="py-1"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% subNotas.forEach((sub) => { %>
+        <tr class="border-t border-slate-100">
+          <td class="py-2 pr-2 font-medium"><%= sub.name %></td>
+          <td class="py-2 pr-2"><%= format.number(sub.price_per_kg) %></td>
+          <td class="py-2 pr-2"><%= format.number(sub.netto_2) %> kg</td>
+          <td class="py-2 pr-2 font-bold"><%= format.currency(sub.amount) %></td>
+          <td class="py-2 text-right">
+            <form method="post" action="<%= url(`/bons/sub-notas/${sub.id}?_method=DELETE`) %>" data-confirm="Hapus sub nota ini?">
+              <button class="text-red-600 hover:underline text-xs">Hapus</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <form method="post" action="<%= url(`/bons/${bon.id}/sub-notas`) %>" class="grid gap-3 md:grid-cols-4">
+    <div>
+      <span class="form-label">Nama</span>
+      <input name="name" required class="form-input uppercase" placeholder="Contoh: ANU" />
+    </div>
+    <div>
+      <span class="form-label">Harga (Rp/kg)</span>
+      <input name="price_per_kg" type="number" min="1" step="1" required class="form-input" placeholder="Contoh: 40" />
+    </div>
+    <div>
+      <span class="form-label">Catatan</span>
+      <input name="notes" class="form-input" placeholder="Opsional" />
+    </div>
+    <div class="flex items-end">
+      <button class="btn-primary">Tambah</button>
+    </div>
+    <p class="text-xs text-slate-500 md:col-span-4">Total otomatis = Netto 2 × Harga, tanpa potongan.</p>
+  </form>
+</section>
+
+<% if (related.notas.length || related.payments.length) { %>
+<section class="mt-5 form-card">
+  <h2>Dokumen Terkait</h2>
   <div class="grid gap-3 md:grid-cols-2">
     <% related.notas.forEach((nota) => { %>
       <a href="<%= url(`/notas/${nota.id}`) %>" class="rounded-lg border border-slate-200 p-4 hover:bg-slate-50">
@@ -70,4 +119,5 @@
     <% }) %>
   </div>
 </section>
+<% } %>
 <%- include('../partials/footer') %>

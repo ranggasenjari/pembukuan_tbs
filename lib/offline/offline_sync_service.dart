@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -67,8 +66,14 @@ class OfflineSyncService {
         pending: operations.length,
         lastAttempt: DateTime.now(),
       );
+      String? firstError;
       for (final operation in operations) {
-        await _syncOperation(operation);
+        try {
+          await _syncOperation(operation);
+        } catch (error) {
+          // Satu item gagal tidak boleh memblokir item lain; lanjutkan.
+          firstError ??= error.toString();
+        }
         operations = await _db.pendingOperations();
         snapshots.value = OfflineSyncSnapshot(
           status: OfflineSyncStatus.syncing,
@@ -76,9 +81,11 @@ class OfflineSyncService {
           lastAttempt: DateTime.now(),
         );
       }
+      final remaining = await _db.pendingCount();
       snapshots.value = OfflineSyncSnapshot(
-        status: OfflineSyncStatus.complete,
-        pending: await _db.pendingCount(),
+        status: remaining == 0 ? OfflineSyncStatus.complete : OfflineSyncStatus.failed,
+        pending: remaining,
+        message: remaining > 0 ? firstError : null,
         lastAttempt: DateTime.now(),
       );
     } on SocketException catch (_) {
@@ -174,6 +181,17 @@ class OfflineSyncService {
       }
     } else if (operation.entityType == 'nota') {
       await _db.purgeNotaBundle(operation.entityId);
+    } else if (operation.entityType == 'sub_nota') {
+      final row = await _db.subNota(operation.entityId);
+      if (row != null) {
+        await _db.saveSubNota(
+          payload: row.payload,
+          syncState: 'synced_active',
+          remoteVersion: (response['sync_version'] as num?)?.toInt() ?? 1,
+        );
+      }
+    } else if (operation.entityType == 'sub_nota_delete') {
+      await _db.deleteSubNota(operation.entityId);
     } else if (operation.entityType == 'bon_delete') {
       final row = await _db.bon(operation.entityId);
       if (row?.imagePath != null) {
@@ -188,6 +206,9 @@ class OfflineSyncService {
   Future<void> _discardCloudConflict(OfflineOperation operation) async {
     if (operation.entityType == 'nota') {
       await _db.purgeNotaBundle(operation.entityId);
+    } else if (operation.entityType == 'sub_nota' ||
+        operation.entityType == 'sub_nota_delete') {
+      await _db.deleteSubNota(operation.entityId);
     } else {
       final row = await _db.bon(operation.entityId);
       if (row?.imagePath != null) {

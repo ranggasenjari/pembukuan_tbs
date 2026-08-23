@@ -1,7 +1,11 @@
 const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 const ZERO_PPH_UM_FACTORY = 'a536e3c0-7ea0-4003-9df0-c38721a9439b';
+const PENGURUS_FACTORY = '376b98eb-0eb4-4a4e-84aa-902429f85669';
 function isZeroPphUm() {
   return document.querySelector('[name="factory_id"]')?.value === ZERO_PPH_UM_FACTORY;
+}
+function isPengurusFactory() {
+  return document.querySelector('[name="factory_id"]')?.value === PENGURUS_FACTORY;
 }
 
 function num(name) {
@@ -47,6 +51,7 @@ function populateSpsiTypes() {
   const current = select.value || window.CURRENT_BON_SPSI_TYPE_ID;
   select.required = Boolean(factory);
   select.innerHTML = '<option value="">Pilih Jenis SPSI</option>';
+  let firstType = null;
   (factory?.factory_spsi_types || []).forEach((type) => {
     const option = document.createElement('option');
     option.value = type.id;
@@ -55,8 +60,11 @@ function populateSpsiTypes() {
     option.dataset.amount = type.amount || 0;
     option.textContent = `${type.name || '-'} (${type.calculation_mode === 'FIX' ? 'Fix' : 'Per/Kg'} - ${rupiah.format(type.amount || 0)})`;
     if (type.id === current) option.selected = true;
+    if (!firstType) firstType = option;
     select.appendChild(option);
   });
+  // Auto-pilih jenis SPSI default pabrik bila belum ada pilihan.
+  if (!current && firstType) firstType.selected = true;
   applySelectedSpsiType();
 }
 
@@ -101,8 +109,11 @@ function calculate() {
   const price = num('price');
   const subtotal = netto2 * price;
   const zeroRule = isZeroPphUm();
-  const pph = zeroRule ? 0 : Math.floor(0.0025 * subtotal);
-  const uangMinum = zeroRule ? 0 : (netto2 > 8000 ? 20000 : 10000);
+  const pengurusRule = isPengurusFactory();
+  const zeroPphUm = zeroRule || pengurusRule;
+  const pph = zeroPphUm ? 0 : Math.floor(0.0025 * subtotal);
+  const uangMinum = zeroPphUm ? 0 : (netto2 > 7000 ? 20000 : 10000);
+  if (pengurusRule) setValue('bp_colt', 0);
 
   // Hanya auto-hitung jika user belum mengubah manual
   const pphInput = document.querySelector('[name="pph"]');
@@ -139,7 +150,8 @@ document.querySelector('[name="relation_agent_id"]')?.addEventListener('change',
   setRelationName(true);
 });
 
-document.querySelector('[name="factory_id"]')?.addEventListener('change', () => {
+function applyFactorySelection() {
+  const factoryId = document.querySelector('[name="factory_id"]')?.value || '';
   window.CURRENT_BON_SPSI_TYPE_ID = '';
   populateSpsiTypes();
   // Reset userEdited flag untuk PPh dan Uang Minum
@@ -147,23 +159,29 @@ document.querySelector('[name="factory_id"]')?.addEventListener('change', () => 
   const umInput = document.querySelector('[name="uang_minum"]');
   if (pphInput) delete pphInput.dataset.userEdited;
   if (umInput) delete umInput.dataset.userEdited;
-  // Isi harga default dari pabrik jika ada (hanya untuk bon baru, bukan edit)
-  const factoryId = document.querySelector('[name="factory_id"]')?.value;
-  const currentPrice = document.querySelector('[name="price"]')?.value;
-  if (factoryId && window.FACTORY_DEFAULT_PRICES && window.FACTORY_DEFAULT_PRICES[factoryId] && (!currentPrice || currentPrice === '0')) {
+  // Isi harga & SPSI sesuai default pabrik
+  if (factoryId && window.FACTORY_DEFAULT_PRICES && window.FACTORY_DEFAULT_PRICES[factoryId]) {
     setValue('price', window.FACTORY_DEFAULT_PRICES[factoryId]);
-    calculate();
   }
-});
+  if (isPengurusFactory()) {
+    setValue('bp_colt', 0);
+    setValue('pph', 0);
+    setValue('uang_minum', 0);
+  }
+  renderFactoryPricePills();
+  calculate();
+}
+
+document.querySelector('[name="factory_id"]')?.addEventListener('change', applyFactorySelection);
 
 document.querySelector('[name="factory_spsi_type_id"]')?.addEventListener('change', applySelectedSpsiType);
 
 document.getElementById('add-deduction')?.addEventListener('click', () => {
   const wrapper = document.createElement('div');
-  wrapper.className = 'deduction-row grid gap-3 md:grid-cols-[1fr_220px_48px]';
+  wrapper.className = 'deduction-row grid gap-2 md:grid-cols-[1fr_200px_40px]';
   wrapper.innerHTML = `
-    <input name="deduction_label" class="form-input" placeholder="Nama potongan">
-    <input name="deduction_amount" value="0" type="number" class="form-input bon-calc deduction-amount">
+    <input name="deduction_label" class="form-input bon-sm" placeholder="Nama potongan">
+    <input name="deduction_amount" value="0" type="number" inputmode="numeric" class="form-input bon-sm bon-calc deduction-amount">
     <button type="button" class="remove-deduction rounded-lg bg-rose-50 text-rose-700">x</button>
   `;
   document.getElementById('deductions').appendChild(wrapper);
@@ -187,9 +205,9 @@ function matchOcrToMasters() {
   const factory = findFactoryByName(factoryName);
   if (factory) {
     setValue('factory_id', factory.id);
-    window.CURRENT_BON_SPSI_TYPE_ID = '';
-    populateSpsiTypes();
+    applyFactorySelection();
   }
+  syncRelationCombobox();
 }
 
 function extractOcrData(payload) {
@@ -213,6 +231,7 @@ function applyOcrFields(data) {
     const input = document.querySelector('[name="ocr_image_url"]');
     if (input) input.value = data.image_url;
   }
+  if (data.image_url && typeof updateBonPhoto === 'function') updateBonPhoto(data.image_url);
 }
 
 document.getElementById('ocr-button')?.addEventListener('click', async () => {
@@ -222,9 +241,19 @@ document.getElementById('ocr-button')?.addEventListener('click', async () => {
     status.textContent = 'Pilih gambar terlebih dahulu.';
     return;
   }
+  if (window.FACTORIES && window.FACTORIES.length) {
+    const selection = await showOcrFactoryDialog();
+    if (!selection) return;
+    if (selection.id) setOcrFactory(selection);
+  }
 
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
+  const factoryId = document.querySelector('[name="factory_id"]')?.value || sessionStorage.getItem('ocr_factory_id') || '';
+  if (factoryId) {
+    formData.append('factory_id', factoryId);
+    formData.append('factory_name', document.querySelector('[name="factory_name"]')?.value || '');
+  }
   status.textContent = 'Membaca OCR...';
   try {
     const response = await fetch(window.appUrl ? window.appUrl('/api/ocr/bon') : '/api/ocr/bon', { method: 'POST', body: formData });
@@ -240,6 +269,114 @@ document.getElementById('ocr-button')?.addEventListener('click', async () => {
   }
 });
 
+function renderFactoryPricePills() {
+  const container = document.getElementById('factory-price-pills');
+  if (!container) return;
+  const factory = getSelectedFactory();
+  container.innerHTML = '';
+  if (!factory) return;
+  const prices = Array.isArray(factory.factory_prices) ? factory.factory_prices : [];
+  if (!prices.length) return;
+  const priceInput = document.querySelector('[name="price"]');
+  prices.forEach((p) => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'price-pill' + (priceInput && Number(priceInput.value) === Number(p.price) ? ' active' : '');
+    pill.textContent = `${p.name || 'Harga'}: ${rupiah.format(Number(p.price) || 0)}`;
+    pill.title = p.name || '';
+    pill.addEventListener('click', () => {
+      if (!priceInput || priceInput.readOnly) return;
+      priceInput.value = p.price;
+      priceInput.dispatchEvent(new Event('input'));
+      renderFactoryPricePills();
+    });
+    container.appendChild(pill);
+  });
+}
+
+document.querySelector('[name="price"]')?.addEventListener('input', renderFactoryPricePills);
+
+function syncRelationCombobox() {
+  const select = document.getElementById('relation-select');
+  const search = document.getElementById('relation-search');
+  if (!select || !search) return;
+  const rel = (window.RELATION_AGENTS || []).find((r) => r.id === select.value);
+  search.value = rel ? rel.name : '';
+  renderRelationList(search.value);
+}
+
+function renderRelationList(filter) {
+  const list = document.getElementById('relation-list');
+  const select = document.getElementById('relation-select');
+  if (!list || !select) return;
+  const term = String(filter || '').trim().toLowerCase();
+  const rels = (window.RELATION_AGENTS || []).filter((r) => !term || String(r.name || '').toLowerCase().includes(term));
+  const selectedId = select.value;
+  list.innerHTML = '';
+  const label = document.createElement('div');
+  label.className = 'relation-list-label';
+  label.textContent = rels.length ? 'Pilih relasi:' : 'Relasi tidak ditemukan';
+  list.appendChild(label);
+  rels.forEach((r) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'relation-list-item' + (r.id === selectedId ? ' active' : '');
+    item.textContent = r.name;
+    item.addEventListener('click', () => {
+      select.value = r.id;
+      syncRelationCombobox();
+      setRelationName(true);
+      closeRelationList();
+    });
+    list.appendChild(item);
+  });
+}
+
+function openRelationList() {
+  const list = document.getElementById('relation-list');
+  if (!list) return;
+  renderRelationList(document.getElementById('relation-search')?.value || '');
+  list.classList.remove('hidden');
+}
+
+function closeRelationList() {
+  document.getElementById('relation-list')?.classList.add('hidden');
+}
+
+function initRelationCombobox() {
+  const search = document.getElementById('relation-search');
+  const select = document.getElementById('relation-select');
+  if (!search || !select) return;
+  search.addEventListener('focus', openRelationList);
+  search.addEventListener('input', () => openRelationList());
+  document.getElementById('relation-clear')?.addEventListener('click', () => {
+    select.value = '';
+    syncRelationCombobox();
+    setRelationName(true);
+    search.focus();
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.relation-combobox')) closeRelationList();
+  });
+  select.addEventListener('change', syncRelationCombobox);
+  syncRelationCombobox();
+}
+
+const relationForm = document.getElementById('bon-form');
+if (relationForm) {
+  relationForm.addEventListener('submit', (e) => {
+    const select = document.getElementById('relation-select');
+    if (select && !select.value) {
+      e.preventDefault();
+      alert('Pilih relasi / agen terlebih dahulu.');
+      const search = document.getElementById('relation-search');
+      if (search) { search.focus(); openRelationList(); }
+    }
+  });
+}
+
+initRelationCombobox();
+renderFactoryPricePills();
 calculate();
 setRelationName();
 populateSpsiTypes();

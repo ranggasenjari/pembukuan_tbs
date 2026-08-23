@@ -46,9 +46,12 @@ void main() {
     expect(message, contains('   1000 kg x Rp'));
     expect(message, contains('   *Rp 1.200.000*'));
     expect(message, contains('   *Potongan:*'));
-    expect(message, contains('      SPSI: Rp'));
-    expect(message, contains('      BP/Colt: Rp'));
-    expect(message, contains('      Pengiriman: Rp'));
+    expect(message, contains('      SPSI:'));
+    expect(message, contains('        9000 kg x Rp'));
+    expect(message, contains('      BP/Colt:'));
+    expect(message, contains('        Rp 5.000'));
+    expect(message, contains('      Pengiriman:'));
+    expect(message, contains('        Rp 10.000'));
     // Total bon = bon.total + dp (sebelum DP)
     expect(message, contains('   *Total bon: Rp 1.000.000*'));
     // TOTAL NOTA = penjumlahan total bon sebelum DP
@@ -57,7 +60,7 @@ void main() {
     expect(message, contains('DP / Panjar: Rp 200.000'));
     expect(message, contains('*Total Akhir: Rp 800.000*'));
     // DP tidak dicantumkan pada daftar potongan
-    expect(message, isNot(contains('      DP: Rp')));
+    expect(message, isNot(contains('      DP:')));
   });
 
   test('omits DP section when no bon has DP', () {

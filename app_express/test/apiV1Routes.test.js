@@ -19,6 +19,37 @@ function makeApp(deps) {
 }
 
 describe('apiV1Routes', () => {
+  it('sets BP to zero for OCR bons marked is_tutup', async () => {
+    const serializeBon = vi.fn((body, calculated) => ({ ...body, ...calculated }));
+    const existingVehicle = { id: 'vehicle-1', plate_number: 'BK1234AA', potongan_bp: 100000, harga: null, uang_minum: null, is_super: false };
+    const supabase = {
+      from(table) {
+        return {
+          select() { return this; },
+          eq() { return this; },
+          limit: async () => ({ data: [], error: null }),
+          maybeSingle: async () => ({ data: table === 'vehicles' ? existingVehicle : null, error: null })
+        };
+      }
+    };
+
+    const response = await request(makeApp({
+      authMiddleware: [(req, res, next) => { req.supabase = supabase; next(); }],
+      bonRepository: {
+        getLatestPrice: vi.fn(async () => 0),
+        serializeBon,
+        createBon: vi.fn(async (client, data) => ({ id: 'bon-1', ...data }))
+      },
+      factoryRepository: { listFactories: vi.fn(async () => []), getDefaultPrice: vi.fn(async () => 0) },
+      paymentRelationRepository: { findByPlate: vi.fn(async () => null) }
+    }))
+      .post('/api/v1/bons/from-ocr')
+      .send({ plate_number: 'BK 1234 AA', bon_date: '2026-08-23', netto_1: 8000, netto_2: 7500, price: 2500, is_tutup: true });
+
+    expect(response.status).toBe(201);
+    expect(serializeBon).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ bp_colt: 0 }), null);
+  });
+
   it('creates a bon through the external API', async () => {
     const bonRepository = {
       serializeBon: vi.fn((body, calculated, imageUrl) => ({

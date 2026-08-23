@@ -42,7 +42,7 @@
 <% } %>
 
 <div class="bon-management-list">
-  <% items.forEach(({ bon, paymentRelation, nota, payments }) => { %>
+  <% items.forEach(({ bon, paymentRelation, nota, payments, subNotas = [] }) => { %>
     <% const locked = bon.status === 'LUNAS'; %>
     <% const bpVal = bon.bp_colt ?? 100000; %>
     <% const firstPayment = (payments || [])[0]; %>
@@ -231,6 +231,39 @@
             </details>
           </div>
         <% } %>
+        <div class="payment-block subnota-block">
+          <div class="sub-head">Sub Nota</div>
+          <% if (subNotas.length) { %>
+            <div class="mini-list">
+              <% subNotas.forEach((sub) => { %>
+                <div>
+                  <div class="sub-row">
+                    <strong><%= sub.name %></strong>
+                    <span class="sub-amount"><%= format.currency(sub.amount) %></span>
+                    <% if (!locked) { %>
+                      <form method="post" action="<%= url(`/bon-management/bons/${bon.id}/sub-notas/${sub.id}?_method=DELETE`) %>" class="sub-delete" data-confirm="Hapus sub nota ini?">
+                        <button type="submit" class="sub-del-btn" title="Hapus">&times;</button>
+                      </form>
+                    <% } %>
+                  </div>
+                  <small><%= format.number(sub.price_per_kg) %>/kg &times; <%= format.number(sub.netto_2) %> kg<%= sub.notes ? ' &mdash; ' + sub.notes : '' %></small>
+                </div>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <p class="muted-line">Belum ada sub nota.</p>
+          <% } %>
+          <% if (!locked) { %>
+            <form method="post" action="<%= url(`/bon-management/bons/${bon.id}/sub-nota`) %>" class="inline-stack subnota-form">
+              <div class="pay-row">
+                <input required name="name" class="bm-input uppercase" placeholder="Nama">
+                <input required type="number" min="1" step="1" name="price_per_kg" class="bm-input number sub-price" placeholder="Harga/kg">
+              </div>
+              <div class="subtotal-line">Total (netto &times; harga): <strong>Rp 0</strong></div>
+              <button class="btn-primary small">Tambah Sub Nota</button>
+            </form>
+          <% } %>
+        </div>
       </section>
 
       <section class="management-segment nota-segment" data-nota-id="<%= nota?.id || '' %>">
@@ -412,6 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.management-card').forEach((card) => {
     const saveButton = card.querySelector('.bm-save');
     const ZERO_FACTORY = 'a536e3c0-7ea0-4003-9df0-c38721a9439b';
+    const PENGURUS_FACTORY = '376b98eb-0eb4-4a4e-84aa-902429f85669';
 
     const recalcTotal = () => {
       const n1 = Number(card.querySelector('[name="netto_1"]')?.value) || 0;
@@ -428,10 +462,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const spsiAmount = spsiMode === 'FIX' ? spsiRate : spsiRate * n1;
 
       const zero = card.dataset.factoryId === ZERO_FACTORY;
+      const pengurus = card.dataset.factoryId === PENGURUS_FACTORY;
+      const zeroPphUm = zero || pengurus;
       const pphBtn = card.querySelector('.bm-pph');
       const pphOn = pphBtn && !pphBtn.disabled && pphBtn.dataset.enabled === '1';
-      const pph = zero ? 0 : (pphOn ? Math.floor(0.0025 * price * n2) : 0);
-      const umValue = zero ? 0 : um;
+      const pph = zeroPphUm ? 0 : (pphOn ? Math.floor(0.0025 * price * n2) : 0);
+      const umValue = zeroPphUm ? 0 : um;
 
       let deductionTotal = 0;
       card.querySelectorAll('[name="deduction_amount"]').forEach((inp) => { deductionTotal += Number(inp.value) || 0; });
@@ -580,6 +616,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  document.querySelectorAll('.management-card').forEach((card) => {
+    const nettoInput = card.querySelector('[name="netto_2"]');
+    const priceInput = card.querySelector('.sub-price');
+    const totalEl = card.querySelector('.subtotal-line strong');
+    if (!priceInput || !totalEl) return;
+    const updateSubtotal = () => {
+      const n2 = Number(nettoInput?.value) || 0;
+      const price = Number(priceInput.value) || 0;
+      totalEl.textContent = money(n2 * price);
+    };
+    priceInput.addEventListener('input', updateSubtotal);
+    if (nettoInput) nettoInput.addEventListener('input', updateSubtotal);
+  });
 });
 </script>
 
@@ -660,6 +710,13 @@ document.addEventListener('DOMContentLoaded', () => {
 .ded-remove, .ded-add { background:var(--surface-soft); border:1px solid var(--line); border-radius:4px; cursor:pointer; font-size:.8rem; font-weight:900; height:24px; line-height:1; padding:0; width:22px; }
 .ded-remove { color:var(--danger, #e11d48); }
 .ded-add { color:var(--primary-strong); }
+.subnota-block { margin-top:8px; }
+.sub-row { align-items:center; display:flex; gap:6px; justify-content:space-between; }
+.sub-amount { font-weight:950; white-space:nowrap; }
+.sub-delete { display:inline-flex; margin:0; }
+.sub-del-btn { background:none; border:none; color:var(--danger, #e11d48); cursor:pointer; font-size:.85rem; font-weight:900; line-height:1; padding:0; }
+.subtotal-line { color:var(--muted); font-size:.7rem; }
+.subtotal-line strong { color:var(--primary-strong); }
 .total-row { border-top:1px solid var(--line); margin-top:8px; padding-top:8px; }
 .total-row strong { font-size:.85rem; }
 .total-row .bon-total { color:#2563eb; font-size:1.15rem; }

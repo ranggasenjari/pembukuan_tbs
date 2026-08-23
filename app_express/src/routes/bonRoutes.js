@@ -3,10 +3,11 @@ const { upload } = require('../config/multer');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const bonRepository = require('../repositories/bonRepository');
 const notaRepository = require('../repositories/notaRepository');
+const subNotaRepository = require('../repositories/subNotaRepository');
 const relationAgentRepository = require('../repositories/relationAgentRepository');
 const factoryRepository = require('../repositories/factoryRepository');
 const vehicleRepository = require('../repositories/vehicleRepository');
-const { calculateBon, parseDeductions } = require('../services/calculations');
+const { calculateBon, parseDeductions, applyFactoryDeductionPresets } = require('../services/calculations');
 const { uploadPublicFile } = require('../services/uploadService');
 const { todayInput } = require('../services/request');
 
@@ -79,7 +80,7 @@ router.get('/new', asyncHandler(async (req, res) => {
 router.post('/', upload.single('image'), asyncHandler(async (req, res) => {
   validateBonMasterSelection(req.body);
   await applyVehicleBp(req.supabase, req.body);
-  const deductions = parseDeductions(req.body);
+  const deductions = applyFactoryDeductionPresets(req.body.factory_id, parseDeductions(req.body));
   // Harga: body > harga kendaraan > default pabrik > latest
   let bonPrice = req.body.price;
   const plate = String(req.body.plate_number || '').replace(/\s+/g, '').toUpperCase();
@@ -120,7 +121,28 @@ router.get('/:id', asyncHandler(async (req, res) => {
     bonRepository.getBon(req.supabase, req.params.id),
     bonRepository.getRelatedRecords(req.supabase, req.params.id)
   ]);
-  res.render('bons/show', { title: `Bon ${bon.ticket_number || bon.plate_number}`, bon, related });
+  let subNotas = [];
+  try {
+    subNotas = await subNotaRepository.listByBon(req.supabase, req.params.id);
+  } catch (error) {
+    // Tabel sub_notas mungkin belum di-migrasi; halaman tetap bisa dibuka.
+    console.error('Sub nota load error:', error.message);
+  }
+  res.render('bons/show', { title: `Bon ${bon.ticket_number || bon.plate_number}`, bon, related, subNotas });
+}));
+
+// Sub Nota
+router.post('/:id/sub-notas', asyncHandler(async (req, res) => {
+  await subNotaRepository.createForBon(req.supabase, req.params.id, req.body);
+  req.flash('success', 'Sub nota berhasil ditambahkan.');
+  res.redirect(`/bons/${req.params.id}`);
+}));
+
+router.delete('/sub-notas/:id', asyncHandler(async (req, res) => {
+  const existing = await subNotaRepository.getSubNota(req.supabase, req.params.id);
+  await subNotaRepository.deleteSubNota(req.supabase, req.params.id);
+  req.flash('success', 'Sub nota berhasil dihapus.');
+  res.redirect(`/bons/${existing.bon_id}`);
 }));
 
 router.get('/:id/edit', asyncHandler(async (req, res) => {
